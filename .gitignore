@@ -1,6 +1,9 @@
 # User specific files
 config.py
-data/
+/models
+/data
+/charts
+/scalers
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
