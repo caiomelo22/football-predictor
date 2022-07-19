@@ -1,9 +1,7 @@
 # User specific files
 config.py
-/models
-/data
+/leagues
 /charts
-/scalers
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
