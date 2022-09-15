@@ -76,7 +76,7 @@ def random_forest(dataset, includes_test = False, random_search = False):
     
     """Feature Importance"""
     
-    feat_importances = pd.Series(classifier.feature_importances_, index=dataset.iloc[:, 6:-1].columns)
+    feat_importances = pd.Series(classifier.feature_importances_, index=dataset.iloc[:, 9:-1].columns)
     feat_importances.nlargest(30).plot(kind='barh')
     title = 'Feature Importance'
     plt.ylabel('Features')
