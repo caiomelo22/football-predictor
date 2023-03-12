@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from config import api_football_key, conn_host, conn_database, conn_user, conn_password
 import mysql.connector
 
@@ -117,6 +118,8 @@ def get_team_previous_games_stats(team_id, season, game_date, scenario, n_last_g
         ha_loss_pct = away_losses * 100 / len(away_previous_season_games.index)
         
     game_stats = get_stats_mean(previous_season_games, team_id, n_last_games, scenario)
+    
+    if any([np.isnan(s) for s in game_stats]): return None
     
     return [points_pct, win_pct, draw_pct, loss_pct, ha_win_pct, ha_draw_pct, ha_loss_pct, win_pct_last_games, draw_pct_last_games, loss_pct_last_games] + game_stats
 
