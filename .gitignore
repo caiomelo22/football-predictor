@@ -1,5 +1,7 @@
 # User specific files
 config.py
+/leagues_data
+/leagues_v2
 /leagues
 /charts
 
