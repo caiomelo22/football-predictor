@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import accuracy_score
 from sklearn.impute import SimpleImputer
 from sklearn.feature_selection import mutual_info_classif
@@ -156,22 +156,22 @@ def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Secon
     return X_train, X_test
 
 
-def run_random_search(X, y, model, parameters_grid, n_iter=100, cv=3, verbose=0, random_state=0, n_jobs=-1):
-    print('Running the random search algorithm to get the best possible model...')
-    random_search_cv = RandomizedSearchCV(estimator=model, param_distributions=parameters_grid,
-                                          n_iter=n_iter, cv=cv, verbose=verbose, random_state=random_state, n_jobs=n_jobs)
+def run_grid_search(X, y, model, parameters_grid, cv=5, verbose=0):
+    print('Running the grid search algorithm to get the best possible model...')
+    grid_search_cv = GridSearchCV(estimator=model, param_grid=parameters_grid,
+                                          cv=cv, verbose=verbose)
 
-    random_search_cv.fit(X, y)
+    grid_search_cv.fit(X, y)
 
-    best_random = random_search_cv.best_estimator_
-    best_parameters = random_search_cv.cv_results_
+    best_random = grid_search_cv.best_estimator_
+    best_parameters = grid_search_cv.cv_results_
 
     print('Best random:', best_random)
 
     return best_random, best_parameters
 
 
-def run_random_forest_random_search(X, y):
+def run_random_forest_grid_search(X, y):
     # Random Forest Optimizer
     model = RandomForestClassifier(random_state=0)
     # Number of features to consider at every split
@@ -197,10 +197,10 @@ def run_random_forest_random_search(X, y):
                        'min_samples_leaf': min_samples_leaf,
                        'bootstrap': bootstrap}
 
-    return run_random_search(X, y, model, parameters_grid)
+    return run_grid_search(X, y, model, parameters_grid)
 
 
-def run_gradient_boosting_random_search(X, y):
+def run_gradient_boosting_grid_search(X, y):
     # Gradient Boosting Optimizer
     model = GradientBoostingClassifier(random_state=0)
     # Criterion
@@ -230,7 +230,7 @@ def run_gradient_boosting_random_search(X, y):
                        'min_samples_leaf': min_samples_leaf,
                        'learning_rate': learning_rate}
 
-    return run_random_search(X, y, model, parameters_grid)
+    return run_grid_search(X, y, model, parameters_grid)
 
 def build_pipeline(X_train, y_train, model):
     # Preprocessing for numerical data
