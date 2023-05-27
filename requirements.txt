@@ -1,0 +1,9 @@
+requests
+pandas
+numpy
+matplotlib
+datetime
+scikit-learn 
+scipy
+seaborn
+IPython

@@ -156,7 +156,8 @@ def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Secon
     return X_train, X_test
 
 
-def run_random_search(X, y, model, parameters_grid, n_iter=100, cv=3, verbose=2, random_state=0, n_jobs=-1):
+def run_random_search(X, y, model, parameters_grid, n_iter=100, cv=3, verbose=0, random_state=0, n_jobs=-1):
+    print('Running the random search algorithm to get the best possible model...')
     random_search_cv = RandomizedSearchCV(estimator=model, param_distributions=parameters_grid,
                                           n_iter=n_iter, cv=cv, verbose=verbose, random_state=random_state, n_jobs=n_jobs)
 
@@ -205,7 +206,7 @@ def run_gradient_boosting_random_search(X, y):
     # Criterion
     criterion = ['friedman_mse', 'squared_error']
     # Losse functions
-    loss = ['log_loss', 'deviance', 'exponential']
+    loss = ['log_loss']
     # Learning rates
     learning_rate = [x for x in np.linspace(0.05, 0.3, 6)]
     # Number of estimators
@@ -218,7 +219,7 @@ def run_gradient_boosting_random_search(X, y):
     max_depth = [int(x) for x in np.linspace(10, 110, num=11)]
     max_depth.append(None)
     # Max features
-    max_features = ['sqrt', 'log2', 'auto', None]
+    max_features = ['sqrt', 'log2', None]
 
     parameters_grid = {'n_estimators': n_estimators,
                        'criterion': criterion,

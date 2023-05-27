@@ -1,0 +1,7 @@
+model = RandomForestClassifier(criterion='entropy', max_depth=50, max_features='log2',
+                         min_samples_leaf=2, min_samples_split=10,
+                         n_estimators=2000, random_state=0)
+
+model = GradientBoostingClassifier(learning_rate=0.05, max_depth=90,
+                            max_features='sqrt', n_estimators=800,
+                            random_state=0)
