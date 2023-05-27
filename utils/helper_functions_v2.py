@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, classification_report
 from sklearn.impute import SimpleImputer
 from sklearn.feature_selection import mutual_info_classif
 import seaborn as sns
@@ -10,8 +10,15 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.naive_bayes import GaussianNB
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+import warnings
+warnings.filterwarnings('ignore')
+print("Setup Complete")
 
 
 def get_league_data(league, seasons, season_test):
@@ -156,81 +163,78 @@ def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Secon
     return X_train, X_test
 
 
-def run_grid_search(X, y, model, parameters_grid, cv=5, verbose=0):
-    print('Running the grid search algorithm to get the best possible model...')
-    grid_search_cv = GridSearchCV(estimator=model, param_grid=parameters_grid,
-                                          cv=cv, verbose=verbose)
-
-    grid_search_cv.fit(X, y)
-
-    best_random = grid_search_cv.best_estimator_
-    best_parameters = grid_search_cv.cv_results_
-
-    print('Best random:', best_random)
-
-    return best_random, best_parameters
-
-
-def run_random_forest_grid_search(X, y):
-    # Random Forest Optimizer
-    model = RandomForestClassifier(random_state=0)
-    # Number of features to consider at every split
-    n_estimators = [int(x) for x in np.linspace(start=200, stop=2000, num=10)]
-    max_features = ['sqrt', 'log2', None]
-    # Criterion
-    criterion = ['gini', 'entropy', 'log_loss']
-    # Maximum number of levels in tree
-    max_depth = [int(x) for x in np.linspace(10, 110, num=11)]
-    max_depth.append(None)
-    # Minimum number of samples required to split a node
-    min_samples_split = [2, 5, 10]
-    # Minimum number of samples required at each leaf node
-    min_samples_leaf = [1, 2, 4]
-    # Method of selecting samples for training each tree
-    bootstrap = [True, False]
-    # Create the random grid
-    parameters_grid = {'n_estimators': n_estimators,
-                       'criterion': criterion,
-                       'max_features': max_features,
-                       'max_depth': max_depth,
-                       'min_samples_split': min_samples_split,
-                       'min_samples_leaf': min_samples_leaf,
-                       'bootstrap': bootstrap}
-
-    return run_grid_search(X, y, model, parameters_grid)
-
-
-def run_gradient_boosting_grid_search(X, y):
-    # Gradient Boosting Optimizer
-    model = GradientBoostingClassifier(random_state=0)
-    # Criterion
-    criterion = ['friedman_mse', 'squared_error']
-    # Losse functions
-    loss = ['log_loss']
-    # Learning rates
-    learning_rate = [x for x in np.linspace(0.05, 0.3, 6)]
-    # Number of estimators
-    n_estimators = [int(x) for x in np.linspace(start=200, stop=2000, num=10)]
-    # Minimum number of samples required to split a node
-    min_samples_split = [2, 5, 10]
-    # Minimum number of samples required at each leaf node
-    min_samples_leaf = [1, 2, 4]
-    # Maximum number of levels in tree
-    max_depth = [int(x) for x in np.linspace(10, 110, num=11)]
-    max_depth.append(None)
-    # Max features
-    max_features = ['sqrt', 'log2', None]
-
-    parameters_grid = {'n_estimators': n_estimators,
-                       'criterion': criterion,
-                       'max_features': max_features,
-                       'loss': loss,
-                       'max_depth': max_depth,
-                       'min_samples_split': min_samples_split,
-                       'min_samples_leaf': min_samples_leaf,
-                       'learning_rate': learning_rate}
-
-    return run_grid_search(X, y, model, parameters_grid)
+def run_grid_search(X_train, y_train):
+    models = {
+        'logistic_regression': LogisticRegression(random_state=0),
+        'naive_bayes': GaussianNB(),
+        'decision_tree': DecisionTreeClassifier(random_state=0),
+        'random_forest': RandomForestClassifier(random_state=0),
+        'svm': SVC(random_state=0),
+        'stochastic_gradient_descent': SGDClassifier(random_state=0),
+        'gradient_boosting': GradientBoostingClassifier(random_state=0)
+    }
+    
+    param_grid = {
+        'logistic_regression': {
+            'penalty': ['l1', 'l2'],
+            'C': [0.1, 1.0, 10.0]
+        },
+        'naive_bayes': {
+            'var_smoothing': [1e-9, 1e-7, 1e-5]
+        },
+        'decision_tree': {
+            'criterion': ['gini', 'entropy'],
+            'max_depth': [None, 5, 10, 25, 50],
+            'min_samples_split': [2, 5, 10, 25, 50],
+            'min_samples_leaf': [1, 2, 4],
+            'max_features': ['sqrt', 'log2', None]
+        },
+        'random_forest': {
+            'n_estimators': [100, 200, 500, 1000, 1500, 2000],
+            'criterion': ['gini', 'entropy'],
+            'max_depth': [None, 5, 10, 25, 50],
+            'min_samples_split': [2, 5, 10, 25, 50],
+            'min_samples_leaf': [1, 2, 4],
+            'max_features': ['sqrt', 'log2', None]
+        },
+        'svm': {
+            'C': [0.1, 1.0, 10.0],
+            'kernel': ['linear', 'rbf'],
+            'gamma': ['scale', 'auto']
+        },
+        'stochastic_gradient_descent': {
+            'loss': ['hinge', 'log', 'modified_huber'],
+            'penalty': ['l1', 'l2'],
+            'alpha': [0.0001, 0.001, 0.01]
+        },
+        'gradient_boosting': {
+            'learning_rate': [0.1, 0.01, 0.001],
+            'n_estimators': [100, 200, 500, 1000, 1500, 2000],
+            'max_depth': [None, 5, 10, 25, 50],
+            'min_samples_split': [2, 5, 10, 25, 50],
+            'min_samples_leaf': [1, 2, 4],
+            'subsample': [0.8, 1.0],
+            'max_features': ['sqrt', 'log2', None]
+        }
+    }
+    
+    for model_name, model in models.items():
+        print(f"\nRunning grid search for {model_name}")
+        
+        param_grid_model = param_grid.get(model_name)
+        if param_grid_model is None:
+            continue
+        
+        grid_search = GridSearchCV(estimator=model, param_grid=param_grid_model, cv=5)
+        grid_search.fit(X_train, y_train)
+        
+        best_params = grid_search.best_params_
+        best_score = grid_search.best_score_
+        
+        print(f"Best parameters: {best_params}")
+        print(f"Best score: {best_score}")
+        
+        save_model_results(model_name, best_params, best_score)
 
 def build_pipeline(X_train, y_train, model):
     # Preprocessing for numerical data
@@ -292,4 +296,12 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test):
     print('Maximum positive sequence: ', positive_consecutive_count)
 
     return test_results_df
+
+def save_model_results(model, params, score):
+    if not model:
+        return
+    
+    f = open("best_models.txt", "a+")
+    f.write(f"\n\nModel: {model}\nParams: {params}\nScore: {score}")
+    f.close()
 

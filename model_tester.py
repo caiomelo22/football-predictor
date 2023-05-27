@@ -32,14 +32,5 @@ X_train, X_test = hf.apply_pca_datasets(X_train, X_test, second_mi_scores)
 # Get mi scores including the PCA features
 third_mi_scores = hf.make_mi_scores(X_train, y_train)
 
-# Get random forest model via random search
-from sklearn.ensemble import RandomForestClassifier
-model = RandomForestClassifier(criterion='entropy', max_depth=50, max_features='log2',
-                         min_samples_leaf=2, min_samples_split=10,
-                         n_estimators=2000, random_state=0)
-
-# Build pipeline
-my_pipeline = hf.build_pipeline(X_train, y_train, model)
-
-# Generate statistics
-test_results_df = hf.build_pred_df(my_pipeline, X_test, y_test, odds_test)
+# Run the grid search algorithm for a few machine learning models
+hf.run_grid_search(X_train, y_train)
