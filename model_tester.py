@@ -33,4 +33,4 @@ X_train, X_test = hf.apply_pca_datasets(X_train, X_test, second_mi_scores)
 third_mi_scores = hf.make_mi_scores(X_train, y_train)
 
 # Run the grid search algorithm for a few machine learning models
-hf.run_grid_search(X_train, y_train)
+hf.run_random_search(X_train, y_train)

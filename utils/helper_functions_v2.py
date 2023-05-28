@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.impute import SimpleImputer
 from sklearn.feature_selection import mutual_info_classif
@@ -163,7 +163,7 @@ def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Secon
     return X_train, X_test
 
 
-def run_grid_search(X_train, y_train):
+def run_random_search(X_train, y_train):
     models = {
         'logistic_regression': LogisticRegression(random_state=0),
         'naive_bayes': GaussianNB(),
@@ -181,21 +181,6 @@ def run_grid_search(X_train, y_train):
         },
         'naive_bayes': {
             'var_smoothing': [1e-9, 1e-7, 1e-5]
-        },
-        'decision_tree': {
-            'criterion': ['gini', 'entropy'],
-            'max_depth': [None, 5, 10, 25, 50],
-            'min_samples_split': [2, 5, 10, 25, 50],
-            'min_samples_leaf': [1, 2, 4],
-            'max_features': ['sqrt', 'log2', None]
-        },
-        'random_forest': {
-            'n_estimators': [100, 200, 500, 1000, 1500, 2000],
-            'criterion': ['gini', 'entropy'],
-            'max_depth': [None, 5, 10, 25, 50],
-            'min_samples_split': [2, 5, 10, 25, 50],
-            'min_samples_leaf': [1, 2, 4],
-            'max_features': ['sqrt', 'log2', None]
         },
         'svm': {
             'C': [0.1, 1.0, 10.0],
@@ -215,21 +200,36 @@ def run_grid_search(X_train, y_train):
             'min_samples_leaf': [1, 2, 4],
             'subsample': [0.8, 1.0],
             'max_features': ['sqrt', 'log2', None]
-        }
+        },
+        'decision_tree': {
+            'criterion': ['gini', 'entropy'],
+            'max_depth': [None, 5, 10, 25, 50],
+            'min_samples_split': [2, 5, 10, 25, 50],
+            'min_samples_leaf': [1, 2, 4],
+            'max_features': ['sqrt', 'log2', None]
+        },
+        'random_forest': {
+            'n_estimators': [100, 200, 500, 1000, 1500, 2000],
+            'criterion': ['gini', 'entropy'],
+            'max_depth': [None, 5, 10, 25, 50],
+            'min_samples_split': [2, 5, 10, 25, 50],
+            'min_samples_leaf': [1, 2, 4],
+            'max_features': ['sqrt', 'log2', None]
+        },
     }
     
     for model_name, model in models.items():
-        print(f"\nRunning grid search for {model_name}")
+        print(f"\nRunning random search for {model_name}")
         
         param_grid_model = param_grid.get(model_name)
         if param_grid_model is None:
             continue
         
-        grid_search = GridSearchCV(estimator=model, param_grid=param_grid_model, cv=5)
-        grid_search.fit(X_train, y_train)
+        random_search = RandomizedSearchCV(estimator=model, param_distributions=param_grid_model, cv=5)
+        random_search.fit(X_train, y_train)
         
-        best_params = grid_search.best_params_
-        best_score = grid_search.best_score_
+        best_params = random_search.best_params_
+        best_score = random_search.best_score_
         
         print(f"Best parameters: {best_params}")
         print(f"Best score: {best_score}")
