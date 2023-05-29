@@ -24,7 +24,7 @@ print("Setup Complete")
 
 def get_league_data(league, seasons, season_test):
     # Read the data
-    X_full = pd.read_csv(f'./leagues_data/{league}/{seasons}.csv', index_col=0)
+    X_full = pd.read_csv(f'./leagues/{league}/formatted_data/{seasons}.csv', index_col=0)
     X_test_full = X_full[X_full['season'] == season_test]
     X_full = X_full[X_full['season'] < season_test]
 
@@ -164,7 +164,7 @@ def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Secon
     return X_train, X_test
 
 
-def run_random_search(X_train, y_train, season):
+def run_random_search(X_train, y_train, season, league):
     models = {
         'logistic_regression': LogisticRegression(random_state=0),
         'naive_bayes': GaussianNB(),
@@ -235,7 +235,7 @@ def run_random_search(X_train, y_train, season):
         print(f"Best parameters: {best_params}")
         print(f"Best score: {best_score}")
         
-        save_model_results(model_name, best_params, best_score, season)
+        save_model_results(model_name, best_params, best_score, season, league)
 
 def build_pipeline(X_train, y_train, model):
     # Preprocessing for numerical data

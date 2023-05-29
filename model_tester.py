@@ -32,4 +32,4 @@ for season in range(season_start, season_end):
     X_train, X_test = hf.apply_pca_datasets(X_train, X_test, second_mi_scores)
 
     # Run the random search algorithm for a few machine learning models
-    hf.run_random_search(X_train, y_train, season)
+    hf.run_random_search(X_train, y_train, season, league)
