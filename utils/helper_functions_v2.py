@@ -269,18 +269,24 @@ def build_pipeline(X_train, y_train, model):
     
     return my_pipeline
 
-def get_odds_from_probability(probs):
-    return 1/probs
+def get_bet_value(probs, odds, bankroll):
+    return (bankroll*(probs - ((1-probs)/odds)))/2
 
-def get_match_profit(row):
-    if row['outcome'] == row['pred']:
-        if row['pred'] == 'H': return row['home_odds'] - 1
-        elif row['pred'] == 'A': return row['away_odds'] - 1
-        elif row['pred'] == 'D': return row['draw_odds'] - 1
+def get_match_profit(row, bankroll):
+    if row['pred'] == 'H':
+        bet_value = get_bet_value(row['home_probs'], row['home_odds'], bankroll)
+    elif row['pred'] == 'A':
+        bet_value = get_bet_value(row['away_probs'], row['away_odds'], bankroll)
     else:
-        return -1
+        bet_value = get_bet_value(row['draw_probs'], row['draw_odds'], bankroll)
+    if row['outcome'] == row['pred']:
+        if row['pred'] == 'H': return (row['home_odds']*bet_value) - bet_value
+        elif row['pred'] == 'A': return (row['away_odds']*bet_value) - bet_value
+        elif row['pred'] == 'D': return (row['draw_odds']*bet_value) - bet_value
+    else:
+        return -bet_value
 
-def build_pred_df(my_pipeline, X_test, y_test, odds_test):
+def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000):
     preds_test = my_pipeline.predict(X_test)
 
     report = classification_report(y_test, preds_test)
@@ -302,7 +308,9 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test):
         n_times = len(preds_test_df[preds_test_df['pred'] == l])
         print(f"Times when {l} was predicted: {n_times} ({round(n_times/len(preds_test_df), 2)})")
 
-    test_results_df['profit'] = test_results_df.apply(lambda x: get_match_profit(x), axis=1)
+    test_results_df['profit'] = test_results_df.apply(lambda x: get_match_profit(x, bankroll), axis=1)
+    test_results_df['progress'] = [bankroll] + test_results_df['profit'].cumsum().add(bankroll).tolist()[1:]
+
     print('\nModel profit:', test_results_df.profit.sum())
     negative_consecutive_count = test_results_df['profit'].lt(0).astype(int).groupby((test_results_df['profit'] >= 0).cumsum()).sum().max()
     print('Maximum negative sequence: ', negative_consecutive_count)
@@ -319,3 +327,22 @@ def save_model_results(model, params, score, season):
     f.write(f"\n\nModel: {model}\nParams: {params}\nScore: {score}")
     f.close()
 
+def plot_betting_progress(test_results_df):
+    accumulated_values = test_results_df['progress']
+
+    # Create x-axis values
+    x = range(len(accumulated_values))
+
+    # Set the figure size
+    plt.figure(figsize=(12, 6))
+
+    # Plot the accumulated column
+    plt.plot(x, accumulated_values)
+
+    # Set labels and title
+    plt.xlabel('N Bets')
+    plt.ylabel('Profit')
+    plt.title('Profit by n bets')
+
+    # Display the plot
+    plt.show()

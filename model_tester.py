@@ -31,8 +31,5 @@ for season in range(season_start, season_end):
     # Create PCA features
     X_train, X_test = hf.apply_pca_datasets(X_train, X_test, second_mi_scores)
 
-    # Get mi scores including the PCA features
-    third_mi_scores = hf.make_mi_scores(X_train, y_train)
-
-    # Run the grid search algorithm for a few machine learning models
+    # Run the random search algorithm for a few machine learning models
     hf.run_random_search(X_train, y_train, season)
