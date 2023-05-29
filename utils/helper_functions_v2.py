@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import json
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.impute import SimpleImputer
@@ -17,6 +18,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 import os
+import pickle
 import warnings
 warnings.filterwarnings('ignore')
 print("Setup Complete")
@@ -24,7 +26,7 @@ print("Setup Complete")
 
 def get_league_data(league, seasons, season_test):
     # Read the data
-    X_full = pd.read_csv(f'./leagues/{league}/formatted_data/{seasons}.csv', index_col=0)
+    X_full = pd.read_csv(f'./leagues_v2/{league}/formatted_data/{seasons}.csv', index_col=0)
     X_test_full = X_full[X_full['season'] == season_test]
     X_full = X_full[X_full['season'] < season_test]
 
@@ -218,6 +220,8 @@ def run_random_search(X_train, y_train, season, league):
             'max_features': ['sqrt', 'log2', None]
         },
     }
+
+    models_dict = {}
     
     for model_name, model in models.items():
         print(f"\nRunning random search for {model_name} in the season {season}")
@@ -229,13 +233,20 @@ def run_random_search(X_train, y_train, season, league):
         random_search = RandomizedSearchCV(estimator=model, param_distributions=param_grid_model, cv=5)
         random_search.fit(X_train, y_train)
         
+        best_model = random_search.best_estimator_
         best_params = random_search.best_params_
         best_score = random_search.best_score_
         
         print(f"Best parameters: {best_params}")
         print(f"Best score: {best_score}")
+
+        models_dict[model_name] = {
+            'estimator': best_model,
+            'params': best_params,
+            'score': best_score
+        }
         
-        save_model_results(model_name, best_params, best_score, season, league)
+    save_model_results(models_dict, season, league)
 
 def build_pipeline(X_train, y_train, model):
     # Preprocessing for numerical data
@@ -257,7 +268,7 @@ def build_pipeline(X_train, y_train, model):
         transformers=[
             ('num', numerical_transformer, numerical_cols),
             ('cat', categorical_transformer, categorical_cols),
-            ('normalization', scaler, numerical_cols + categorical_cols)
+            # ('normalization', scaler, numerical_cols + categorical_cols)
         ])
 
     # Bundle preprocessing and modeling code in a pipeline
@@ -320,17 +331,20 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000):
 
     return test_results_df
 
-def save_model_results(model, params, score, season, league):
-    if not model:
-        return
-    
-    path = f"leagues_v2/{league}/best_models"
+def save_model_results(models_dict, season, league):
+    path = f"leagues_v2/{league}/best_models/{season}"
     if not os.path.exists(path):
         os.makedirs(path)
-    
-    f = open(f"{path}/{season}.txt", "a+")
-    f.write(f"\n\nModel: {model}\nParams: {params}\nScore: {score}")
-    f.close()
+
+    for model in models_dict.keys():
+        model_path = f"{path}/{model}.pkl"
+        with open(model_path, 'wb') as file:
+            pickle.dump(models_dict[model]['estimator'], file)
+        del models_dict[model]['estimator']
+
+    json_path = f"{path}/best_models.json"
+    with open(json_path, "w") as file:
+        json.dump(models_dict, file)
 
 def plot_betting_progress(test_results_df):
     accumulated_values = test_results_df['progress']
