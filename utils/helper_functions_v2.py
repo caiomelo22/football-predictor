@@ -18,7 +18,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 import os
-import pickle
+from joblib import dump
 import warnings
 warnings.filterwarnings('ignore')
 print("Setup Complete")
@@ -172,14 +172,13 @@ def run_random_search(X_train, y_train, season, league):
         'naive_bayes': GaussianNB(),
         'decision_tree': DecisionTreeClassifier(random_state=0),
         'random_forest': RandomForestClassifier(random_state=0),
-        'svm': SVC(random_state=0),
+        'svm': SVC(random_state=0, probability=True),
         'stochastic_gradient_descent': SGDClassifier(random_state=0),
-        'gradient_boosting': GradientBoostingClassifier(random_state=0)
     }
     
     param_grid = {
         'logistic_regression': {
-            'penalty': ['l1', 'l2'],
+            'penalty': ['l2'],
             'C': [0.1, 1.0, 10.0]
         },
         'naive_bayes': {
@@ -194,15 +193,6 @@ def run_random_search(X_train, y_train, season, league):
             'loss': ['hinge', 'log', 'modified_huber'],
             'penalty': ['l1', 'l2'],
             'alpha': [0.0001, 0.001, 0.01]
-        },
-        'gradient_boosting': {
-            'learning_rate': [0.1, 0.01, 0.001],
-            'n_estimators': [100, 200, 500, 1000, 1500, 2000],
-            'max_depth': [None, 5, 10, 25, 50],
-            'min_samples_split': [2, 5, 10, 25, 50],
-            'min_samples_leaf': [1, 2, 4],
-            'subsample': [0.8, 1.0],
-            'max_features': ['sqrt', 'log2', None]
         },
         'decision_tree': {
             'criterion': ['gini', 'entropy'],
@@ -337,9 +327,8 @@ def save_model_results(models_dict, season, league):
         os.makedirs(path)
 
     for model in models_dict.keys():
-        model_path = f"{path}/{model}.pkl"
-        with open(model_path, 'wb') as file:
-            pickle.dump(models_dict[model]['estimator'], file)
+        model_path = f"{path}/{model}.joblib"
+        dump(models_dict[model]['estimator'], model_path)
         del models_dict[model]['estimator']
 
     json_path = f"{path}/best_models.json"

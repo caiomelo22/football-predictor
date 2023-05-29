@@ -2,7 +2,9 @@ requests
 pandas
 numpy
 matplotlib
+joblib==1.1
 datetime
+jupyter
 scikit-learn 
 scipy
 seaborn
