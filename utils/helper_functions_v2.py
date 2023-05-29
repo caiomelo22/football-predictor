@@ -113,11 +113,12 @@ def plot_feature_corr_chart(X, numerical_cols):
     plt.show()
 
 
-def scale_values(X, features_to_explore):
+def scale_values(X, X_test, features_to_explore):
     # Standardize
     scaler = MinMaxScaler()
     X_scaled = scaler.fit_transform(X.loc[:, features_to_explore])
-    return X_scaled
+    X_test_scaled = scaler.transform(X_test.loc[:, features_to_explore])
+    return X_scaled, X_test_scaled
 
 
 def create_cluster_features(X_train, X_test, mi_scores):  # First mi scores
@@ -125,8 +126,7 @@ def create_cluster_features(X_train, X_test, mi_scores):  # First mi scores
     print('Total features to consider when clustering:', len(features_to_explore))
 
     for i in range(len(features_to_explore)):
-        X_scaled = scale_values(X_train, features_to_explore[i:i+2])
-        X_test_scaled = scale_values(X_test, features_to_explore[i:i+2])
+        X_scaled, X_test_scaled = scale_values(X_train, X_test, features_to_explore[i:i+2])
 
         kmeans = KMeans(n_clusters=5, n_init=10, random_state=0)
         X_train[f"Cluster_{i+1}"] = kmeans.fit_predict(X_scaled)
@@ -136,10 +136,7 @@ def create_cluster_features(X_train, X_test, mi_scores):  # First mi scores
         X_test[f"Cluster_{i+1}"] = X_test[f"Cluster_{i+1}"].astype('int')
 
 
-def get_pca(X, cols, pca, just_transform=False):
-    # Standardize
-    X_scaled = scale_values(X, cols)
-
+def get_pca(X, X_scaled, pca, just_transform=False):
     if just_transform:
         X_pca = pca.transform(X_scaled)
     else:
@@ -158,10 +155,13 @@ def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Secon
         len(mi_scores)) if mi_scores[f] > min_mi_score]
     print('Total features to consider when doing the PCA:',
           len(features_to_explore))
+    
+    # Standardize
+    X_scaled, X_test_scaled = scale_values(X_train, X_test, features_to_explore)
 
     pca = PCA(random_state=0)
-    X_train = get_pca(X_train, features_to_explore, pca)
-    X_test = get_pca(X_test, features_to_explore, pca, just_transform=True)
+    X_train = get_pca(X_train, X_scaled, pca)
+    X_test = get_pca(X_test, X_test_scaled, pca, just_transform=True)
 
     return X_train, X_test
 
@@ -173,7 +173,6 @@ def run_random_search(X_train, y_train, season, league):
         'decision_tree': DecisionTreeClassifier(random_state=0),
         'random_forest': RandomForestClassifier(random_state=0),
         'svm': SVC(random_state=0, probability=True),
-        'stochastic_gradient_descent': SGDClassifier(random_state=0),
     }
     
     param_grid = {
@@ -188,11 +187,6 @@ def run_random_search(X_train, y_train, season, league):
             'C': [0.1, 1.0, 10.0],
             'kernel': ['linear', 'rbf'],
             'gamma': ['scale', 'auto']
-        },
-        'stochastic_gradient_descent': {
-            'loss': ['hinge', 'log', 'modified_huber'],
-            'penalty': ['l1', 'l2'],
-            'alpha': [0.0001, 0.001, 0.01]
         },
         'decision_tree': {
             'criterion': ['gini', 'entropy'],
