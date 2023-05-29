@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.impute import SimpleImputer
 from sklearn.feature_selection import mutual_info_classif
 import seaborn as sns
@@ -163,7 +163,7 @@ def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Secon
     return X_train, X_test
 
 
-def run_random_search(X_train, y_train):
+def run_random_search(X_train, y_train, season):
     models = {
         'logistic_regression': LogisticRegression(random_state=0),
         'naive_bayes': GaussianNB(),
@@ -219,7 +219,7 @@ def run_random_search(X_train, y_train):
     }
     
     for model_name, model in models.items():
-        print(f"\nRunning random search for {model_name}")
+        print(f"\nRunning random search for {model_name} in the season {season}")
         
         param_grid_model = param_grid.get(model_name)
         if param_grid_model is None:
@@ -234,7 +234,7 @@ def run_random_search(X_train, y_train):
         print(f"Best parameters: {best_params}")
         print(f"Best score: {best_score}")
         
-        save_model_results(model_name, best_params, best_score)
+        save_model_results(model_name, best_params, best_score, season)
 
 def build_pipeline(X_train, y_train, model):
     # Preprocessing for numerical data
@@ -269,6 +269,9 @@ def build_pipeline(X_train, y_train, model):
     
     return my_pipeline
 
+def get_odds_from_probability(probs):
+    return 1/probs
+
 def get_match_profit(row):
     if row['outcome'] == row['pred']:
         if row['pred'] == 'H': return row['home_odds'] - 1
@@ -280,16 +283,27 @@ def get_match_profit(row):
 def build_pred_df(my_pipeline, X_test, y_test, odds_test):
     preds_test = my_pipeline.predict(X_test)
 
-    accuracy = accuracy_score(y_test, preds_test)
-    print('Accuracy:', accuracy)
+    report = classification_report(y_test, preds_test)
+    print('Classification Report:')
+    print(report)
+
+    labels = ["H", "D", "A"]
+    matrix = confusion_matrix(y_test, preds_test, labels=labels)
+    print('Confusion Matrix:')
+    print(matrix)
 
     test_probs = my_pipeline.predict_proba(X_test)
     probs_test_df = pd.DataFrame(test_probs, index=y_test.index, columns=['away_probs', 'draw_probs', 'home_probs'])
     preds_test_df = pd.DataFrame(preds_test, index=y_test.index, columns=['pred'])
     test_results_df = pd.concat([y_test, preds_test_df, probs_test_df, odds_test], axis=1)
 
+    print('\n')
+    for l in labels:
+        n_times = len(preds_test_df[preds_test_df['pred'] == l])
+        print(f"Times when {l} was predicted: {n_times} ({round(n_times/len(preds_test_df), 2)})")
+
     test_results_df['profit'] = test_results_df.apply(lambda x: get_match_profit(x), axis=1)
-    print('Model profit:', test_results_df.profit.sum())
+    print('\nModel profit:', test_results_df.profit.sum())
     negative_consecutive_count = test_results_df['profit'].lt(0).astype(int).groupby((test_results_df['profit'] >= 0).cumsum()).sum().max()
     print('Maximum negative sequence: ', negative_consecutive_count)
     positive_consecutive_count = test_results_df['profit'].gt(0).astype(int).groupby((test_results_df['profit'] < 0).cumsum()).sum().max()
@@ -297,11 +311,11 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test):
 
     return test_results_df
 
-def save_model_results(model, params, score):
+def save_model_results(model, params, score, season):
     if not model:
         return
     
-    f = open("best_models.txt", "a+")
+    f = open(f"best_models_{season}.txt", "a+")
     f.write(f"\n\nModel: {model}\nParams: {params}\nScore: {score}")
     f.close()
 
