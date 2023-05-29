@@ -16,6 +16,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
+import os
 import warnings
 warnings.filterwarnings('ignore')
 print("Setup Complete")
@@ -319,11 +320,15 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000):
 
     return test_results_df
 
-def save_model_results(model, params, score, season):
+def save_model_results(model, params, score, season, league):
     if not model:
         return
     
-    f = open(f"best_models_{season}.txt", "a+")
+    path = f"leagues_v2/{league}/best_models"
+    if not os.path.exists(path):
+        os.makedirs(path)
+    
+    f = open(f"{path}/{season}.txt", "a+")
     f.write(f"\n\nModel: {model}\nParams: {params}\nScore: {score}")
     f.close()
 
