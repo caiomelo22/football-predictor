@@ -12,6 +12,7 @@ from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -20,6 +21,7 @@ from sklearn.tree import DecisionTreeClassifier
 import os
 from joblib import dump
 import warnings
+from scipy.stats import uniform, randint
 warnings.filterwarnings('ignore')
 print("Setup Complete")
 
@@ -175,33 +177,10 @@ def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Secon
 
 def run_random_search(X_train, y_train, season, league):
     models = {
-        'logistic_regression': LogisticRegression(random_state=0),
-        'naive_bayes': GaussianNB(),
-        'decision_tree': DecisionTreeClassifier(random_state=0),
-        'random_forest': RandomForestClassifier(random_state=0),
-        'svm': SVC(random_state=0, probability=True),
+        # 'random_forest': RandomForestClassifier(random_state=0),
     }
     
     param_grid = {
-        'logistic_regression': {
-            'penalty': ['l2'],
-            'C': [0.1, 1.0, 10.0]
-        },
-        'naive_bayes': {
-            'var_smoothing': [1e-9, 1e-7, 1e-5]
-        },
-        'svm': {
-            'C': [0.1, 1.0, 10.0],
-            'kernel': ['linear', 'rbf'],
-            'gamma': ['scale', 'auto']
-        },
-        'decision_tree': {
-            'criterion': ['gini', 'entropy'],
-            'max_depth': [None, 5, 10, 25, 50],
-            'min_samples_split': [2, 5, 10, 25, 50],
-            'min_samples_leaf': [1, 2, 4],
-            'max_features': ['sqrt', 'log2', None]
-        },
         'random_forest': {
             'n_estimators': [100, 200, 500, 1000, 1500, 2000],
             'criterion': ['gini', 'entropy'],
@@ -212,7 +191,23 @@ def run_random_search(X_train, y_train, season, league):
         },
     }
 
-    models_dict = {}
+    models_dict = {
+        'naive_bayes': {
+            'estimator': GaussianNB(var_smoothing=1e-7),
+            'params': None,
+            'score': None
+        },
+        'knn': {
+            'estimator': KNeighborsClassifier(n_neighbors=10),
+            'params': None,
+            'score': None
+        },
+        'logistic_regression': {
+            'estimator': LogisticRegression(random_state=0),
+            'params': None,
+            'score': None
+        }
+    }
     
     for model_name, model in models.items():
         print(f"\nRunning random search for {model_name} in the season {season}")
@@ -272,21 +267,32 @@ def build_pipeline(X_train, y_train, model):
     
     return my_pipeline
 
-def get_bet_value(probs, odds, bankroll):
-    return 100
-    return (bankroll*(probs - ((1-probs)/odds)))/4
+def get_pred_odds(probs):
+    return 1/probs
+
+def get_bet_value(odds, probs, bankroll):
+    return bankroll * 0.05
+    return (bankroll*(probs - ((1-probs)/odds)))/6
+
+def get_bet_odds_probs(bet):
+    if bet['pred'] == 'H': return bet['home_odds'], bet['home_probs']
+    if bet['pred'] == 'A': return bet['away_odds'], bet['away_probs']
+    if bet['pred'] == 'D': return bet['draw_odds'], bet['draw_probs']
+
+def bet_worth_it(probs, odds):
+    return True
+    return get_pred_odds(probs) > odds and odds > 1.5
+    
+def get_bet_value_by_row(row, bankroll):
+    odds, probs = get_bet_odds_probs(row)
+    return get_bet_value(odds, probs, bankroll)
 
 def get_match_profit(row, bankroll):
-    if row['pred'] == 'H':
-        bet_value = get_bet_value(row['home_probs'], row['home_odds'], bankroll)
-    elif row['pred'] == 'A':
-        bet_value = get_bet_value(row['away_probs'], row['away_odds'], bankroll)
-    else:
-        bet_value = get_bet_value(row['draw_probs'], row['draw_odds'], bankroll)
+    odds, probs = get_bet_odds_probs(row)
+    bet_value = get_bet_value(probs=probs, odds=odds, bankroll=bankroll)
     if row['outcome'] == row['pred']:
-        if row['pred'] == 'H': return (row['home_odds']*bet_value) - bet_value
-        elif row['pred'] == 'A': return (row['away_odds']*bet_value) - bet_value
-        elif row['pred'] == 'D': return (row['draw_odds']*bet_value) - bet_value
+        if bet_worth_it(probs, odds): return (odds*bet_value) - bet_value
+        else: return 0
     else:
         return -bet_value
 
@@ -312,6 +318,7 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000):
         n_times = len(preds_test_df[preds_test_df['pred'] == l])
         print(f"Times when {l} was predicted: {n_times} ({round(n_times/len(preds_test_df), 2)})")
 
+    test_results_df['bet_worth'] = test_results_df.apply(lambda x: get_bet_value_by_row(x, bankroll), axis=1)
     test_results_df['profit'] = test_results_df.apply(lambda x: get_match_profit(x, bankroll), axis=1)
     test_results_df['progress'] = [bankroll] + test_results_df['profit'].cumsum().add(bankroll).tolist()[1:]
 
@@ -320,6 +327,8 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000):
     print('Maximum negative sequence: ', negative_consecutive_count)
     positive_consecutive_count = test_results_df['profit'].gt(0).astype(int).groupby((test_results_df['profit'] < 0).cumsum()).sum().max()
     print('Maximum positive sequence: ', positive_consecutive_count)
+    print('Maximum bet worth:', test_results_df.bet_worth.max())
+    print('Minimum bet worth:', test_results_df.bet_worth.min())
 
     return test_results_df
 
