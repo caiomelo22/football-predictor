@@ -36,7 +36,14 @@ def get_league_data(league, seasons, season_test):
                 'away_odds', 'draw_odds'], axis=1, inplace=True)
 
     y_test = X_test_full.outcome
-    odds_test = X_test_full[['home_odds', 'away_odds', 'draw_odds']]
+
+    odds_cols = ['home_odds', 'away_odds', 'draw_odds']
+    odds_test = X_test_full[odds_cols]
+    
+    for c in odds_cols:
+        odds_test[c] = pd.to_numeric(odds_test[c], errors='coerce')
+    odds_test.dropna(inplace=True)
+
     X_test_full.drop(['outcome', 'home_score', 'away_score',
                      'home_odds', 'away_odds', 'draw_odds'], axis=1, inplace=True)
 
@@ -266,7 +273,8 @@ def build_pipeline(X_train, y_train, model):
     return my_pipeline
 
 def get_bet_value(probs, odds, bankroll):
-    return (bankroll*(probs - ((1-probs)/odds)))/2
+    return 100
+    return (bankroll*(probs - ((1-probs)/odds)))/4
 
 def get_match_profit(row, bankroll):
     if row['pred'] == 'H':
