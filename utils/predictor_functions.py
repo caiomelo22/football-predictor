@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 from sklearn.decomposition import PCA
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
@@ -231,6 +231,11 @@ def run_random_search(X_train, y_train, season, league):
             'params': best_params,
             'score': best_score
         }
+
+    voting_classifier_estimators = []
+    for model in models_dict.keys():
+        voting_classifier_estimators.append((model, models_dict[model]['estimator']))
+    models_dict['voting_classifier'] = {'estimator': VotingClassifier(estimators=voting_classifier_estimators, voting='soft')}
         
     save_model_results(models_dict, season, league)
 
