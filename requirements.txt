@@ -5,7 +5,10 @@ matplotlib
 joblib==1.1
 datetime
 jupyter
+selenium
 scikit-learn 
 scipy
 seaborn
+thefuzz
 IPython
+webdriver-manager

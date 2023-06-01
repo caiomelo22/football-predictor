@@ -3,7 +3,7 @@ import utils.predictor_functions as pf
 league = 'mls'
 seasons = '2018-2024'
 season_start = 2019
-season_end = 2023
+season_end = 2024
 
 for season in range(season_start, season_end):
     # Read the data
@@ -14,10 +14,6 @@ for season in range(season_start, season_end):
 
     # Keep selected columns only
     X_train, y_train, X_test = pf.filter_datasets(X_full, y, X_test_full, categorical_cols, numerical_cols)
-
-    # Transform numerical and categorical cols
-    X_train = pf.transform_x(X_train, categorical_cols, numerical_cols)
-    X_test = pf.transform_x(X_test, categorical_cols, numerical_cols)
 
     # Get mi scores
     first_mi_scores = pf.make_mi_scores(X_train, y_train)
@@ -32,4 +28,4 @@ for season in range(season_start, season_end):
     X_train, X_test = pf.apply_pca_datasets(X_train, X_test, second_mi_scores)
 
     # Run the random search algorithm for a few machine learning models
-    pf.run_random_search(X_train, y_train, season, league)
+    pf.get_models_dict(season, league)

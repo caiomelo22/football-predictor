@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import json
+from sklearn.discriminant_analysis import StandardScaler
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.impute import SimpleImputer
@@ -19,11 +20,27 @@ from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 import os
-from joblib import dump
+from joblib import dump, load
 import warnings
 from scipy.stats import uniform, randint
 warnings.filterwarnings('ignore')
 print("Setup Complete")
+
+def separate_dataset_info(X):
+    y = X.outcome
+
+    odds_cols = ['home_odds', 'away_odds', 'draw_odds']
+    odds = X[odds_cols]
+    
+    for c in odds_cols:
+        odds[c] = pd.to_numeric(odds[c], errors='coerce')
+    odds.dropna(inplace=True)
+
+    X.drop(['outcome', 'home_score', 'away_score',
+                     'home_odds', 'away_odds', 'draw_odds'], axis=1, inplace=True)
+    
+    _, numerical_cols = set_numerical_categorical_cols(X)
+    return X[numerical_cols], y, odds
 
 
 def get_league_data(league, seasons, season_test):
@@ -37,17 +54,7 @@ def get_league_data(league, seasons, season_test):
     X_full.drop(['outcome', 'home_score', 'away_score', 'home_odds',
                 'away_odds', 'draw_odds'], axis=1, inplace=True)
 
-    y_test = X_test_full.outcome
-
-    odds_cols = ['home_odds', 'away_odds', 'draw_odds']
-    odds_test = X_test_full[odds_cols]
-    
-    for c in odds_cols:
-        odds_test[c] = pd.to_numeric(odds_test[c], errors='coerce')
-    odds_test.dropna(inplace=True)
-
-    X_test_full.drop(['outcome', 'home_score', 'away_score',
-                     'home_odds', 'away_odds', 'draw_odds'], axis=1, inplace=True)
+    X_test_full, y_test, odds_test = separate_dataset_info(X_test_full)
 
     return X_full, y, X_test_full, y_test, odds_test
 
@@ -70,28 +77,10 @@ def filter_datasets(X_full, y, X_test_full, categorical_cols, numerical_cols):
     # Keep selected columns only
     my_cols = categorical_cols + numerical_cols
     y_train = y.copy()
-    X_train = X_full[my_cols]
-    X_test = X_test_full[my_cols]
+    X_train = X_full[numerical_cols]
+    X_test = X_test_full[numerical_cols]
 
     return X_train, y_train, X_test
-
-
-def transform_x(X, categorical_cols, numerical_cols):
-    X = X.copy()
-
-    # Replacing missing values
-    imputer = SimpleImputer(strategy='mean')
-    X[numerical_cols] = imputer.fit_transform(X[numerical_cols])
-
-    if categorical_cols:
-        imputer = SimpleImputer(strategy='constant')
-        X[categorical_cols] = imputer.fit_transform(X[categorical_cols])
-
-    # Label encoding for categoricals
-    for colname in categorical_cols:
-        X[colname], _ = X[colname].factorize()
-
-    return X
 
 
 def make_mi_scores(X, y):
@@ -121,76 +110,95 @@ def plot_feature_corr_chart(X, numerical_cols):
     sns.heatmap(data=plot_data)
     plt.show()
 
+def scale_dataset(df, scaler, just_transform = False):
+    cols = df.columns
+    if just_transform:
+        df = pd.DataFrame(scaler.transform(df), columns=cols)
+    else:
+        df = pd.DataFrame(scaler.fit_transform(df), columns=cols)
+    return df
 
-def scale_values(X, X_test, features_to_explore):
+def scale_test_values(X_test, scaler, features_to_explore):
+    X_test_scaled = scale_dataset(X_test.loc[:, features_to_explore], scaler, just_transform=True)
+    return X_test_scaled
+
+def scale_train_values(X):
     # Standardize
     scaler = MinMaxScaler()
-    X_scaled = scaler.fit_transform(X.loc[:, features_to_explore])
-    X_test_scaled = scaler.transform(X_test.loc[:, features_to_explore])
-    return X_scaled, X_test_scaled
+    X_scaled = scale_dataset(X, scaler)
+    return X_scaled, scaler
 
+def scale_values(X_train, X_test, features_to_explore):
+    X_train_scaled, scaler = scale_train_values(X_train, features_to_explore)
+    X_test_scaled = scale_test_values(X_test, scaler, features_to_explore)
+    return X_train_scaled, X_test_scaled, scaler
+
+def train_kmeans(X_train, features_to_explore):
+    features_kmeans_list = []
+    kmeans_scaler_list = []
+    for i in range(len(features_to_explore)):
+        kmeans_scaler = MinMaxScaler()
+        kmeans = KMeans(n_clusters=5, n_init=10, random_state=0)
+        X_train[f"Cluster_{i+1}"] = kmeans.fit_predict(scale_dataset(X_train.loc[:, features_to_explore[i:i+2]], kmeans_scaler))
+
+        X_train[f"Cluster_{i+1}"] = X_train[f"Cluster_{i+1}"].astype('int')
+
+        kmeans_scaler_list.append(kmeans_scaler)
+        features_kmeans_list.append((features_to_explore[i:i+2], kmeans))
+
+    return X_train, kmeans_scaler_list, features_kmeans_list
+
+def apply_kmeans(X_test, kmeans_scaler_list, features_kmeans_list):
+    for i, fk in enumerate(features_kmeans_list):
+        features, kmeans = fk
+        X_test[f"Cluster_{i+1}"] = kmeans.predict(scale_dataset(X_test.loc[:, features], kmeans_scaler_list[i], just_transform=True))
+        X_test[f"Cluster_{i+1}"] = X_test[f"Cluster_{i+1}"].astype('int')
+
+    return X_test
 
 def create_cluster_features(X_train, X_test, mi_scores):  # First mi scores
     features_to_explore = [mi_scores.index[f] for f in range(len(mi_scores))]
     print('Total features to consider when clustering:', len(features_to_explore))
 
-    for i in range(len(features_to_explore)):
-        X_scaled, X_test_scaled = scale_values(X_train, X_test, features_to_explore[i:i+2])
+    X_train, kmeans_scaler_list, features_kmeans_list = train_kmeans(X_train, features_to_explore)
+    X_test = apply_kmeans(X_test, kmeans_scaler_list, features_kmeans_list)
 
-        kmeans = KMeans(n_clusters=5, n_init=10, random_state=0)
-        X_train[f"Cluster_{i+1}"] = kmeans.fit_predict(X_scaled)
-        X_test[f"Cluster_{i+1}"] = kmeans.predict(X_test_scaled)
+    return X_train, X_test, kmeans_scaler_list, features_kmeans_list
 
-        X_train[f"Cluster_{i+1}"] = X_train[f"Cluster_{i+1}"].astype('int')
-        X_test[f"Cluster_{i+1}"] = X_test[f"Cluster_{i+1}"].astype('int')
-
-
-def get_pca(X, X_scaled, pca, just_transform=False):
-    if just_transform:
-        X_pca = pca.transform(X_scaled)
-    else:
-        X_pca = pca.fit_transform(X_scaled)
-
-    # Convert to df
-    component_names = [f"PC{i+1}" for i in range(X_pca.shape[1])]
-    X_pca = pd.DataFrame(X_pca, columns=component_names, index=X.index)
-
-    X_final = pd.concat([X, X_pca], axis=1)
-    return X_final
-
-
-def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Second mi scores
+def train_pca(X_train, mi_scores, min_mi_score=0.001):
     features_to_explore = [mi_scores.index[f] for f in range(
         len(mi_scores)) if mi_scores[f] > min_mi_score]
     print('Total features to consider when doing the PCA:',
           len(features_to_explore))
-    
-    # Standardize
-    X_scaled, X_test_scaled = scale_values(X_train, X_test, features_to_explore)
-
     pca = PCA(random_state=0)
-    X_train = get_pca(X_train, X_scaled, pca)
-    X_test = get_pca(X_test, X_test_scaled, pca, just_transform=True)
+    pca_scaler = MinMaxScaler()
+    X_pca = pca.fit_transform(scale_dataset(X_train.loc[:, features_to_explore], pca_scaler))
 
-    return X_train, X_test
+    # Convert to df
+    component_names = [f"PC{i+1}" for i in range(X_pca.shape[1])]
+    X_pca = pd.DataFrame(X_pca, columns=component_names, index=X_train.index)
+
+    X_final = pd.concat([X_train, X_pca], axis=1)
+    return X_final, features_to_explore, pca_scaler, pca
+
+def apply_pca(X_test, scaler, pca, features_to_explore):
+    X_pca = pca.transform(scale_dataset(X_test.loc[:, features_to_explore], scaler, just_transform=True))
+
+    # Convert to df
+    component_names = [f"PC{i+1}" for i in range(X_pca.shape[1])]
+    X_pca = pd.DataFrame(X_pca, columns=component_names, index=X_test.index)
+
+    X_final = pd.concat([X_test, X_pca], axis=1)
+    return X_final
+
+def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Second mi scores
+    X_train, features_to_explore, pca_scaler, pca = train_pca(X_train, mi_scores, min_mi_score=min_mi_score)
+    X_test = apply_pca(X_test, pca_scaler, pca, features_to_explore)
+
+    return X_train, X_test, features_to_explore, pca_scaler, pca
 
 
-def run_random_search(X_train, y_train, season, league):
-    models = {
-        # 'random_forest': RandomForestClassifier(random_state=0),
-    }
-    
-    param_grid = {
-        'random_forest': {
-            'n_estimators': [100, 200, 500, 1000, 1500, 2000],
-            'criterion': ['gini', 'entropy'],
-            'max_depth': [None, 5, 10, 25, 50],
-            'min_samples_split': [2, 5, 10, 25, 50],
-            'min_samples_leaf': [1, 2, 4],
-            'max_features': ['sqrt', 'log2', None]
-        },
-    }
-
+def get_models_dict(season, league):
     models_dict = {
         'naive_bayes': {
             'estimator': GaussianNB(var_smoothing=1e-7),
@@ -209,29 +217,6 @@ def run_random_search(X_train, y_train, season, league):
         }
     }
     
-    for model_name, model in models.items():
-        print(f"\nRunning random search for {model_name} in the season {season}")
-        
-        param_grid_model = param_grid.get(model_name)
-        if param_grid_model is None:
-            continue
-        
-        random_search = RandomizedSearchCV(estimator=model, param_distributions=param_grid_model, cv=5)
-        random_search.fit(X_train, y_train)
-        
-        best_model = random_search.best_estimator_
-        best_params = random_search.best_params_
-        best_score = random_search.best_score_
-        
-        print(f"Best parameters: {best_params}")
-        print(f"Best score: {best_score}")
-
-        models_dict[model_name] = {
-            'estimator': best_model,
-            'params': best_params,
-            'score': best_score
-        }
-
     voting_classifier_estimators = []
     for model in models_dict.keys():
         voting_classifier_estimators.append((model, models_dict[model]['estimator']))
@@ -263,14 +248,18 @@ def build_pipeline(X_train, y_train, model):
         ])
 
     # Bundle preprocessing and modeling code in a pipeline
-    my_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
-                                ('model', model)
-                                ])
+    pipeline = Pipeline(steps=
+                           [('preprocessor', preprocessor),
+                            # ('feature_selection', SelectKBest(score_func=mutual_info_classif, k='all')),  # Select features based on mutual information
+                            # ('pca', PCA(random_state=0), ),  # Perform PCA
+                            # ('kmeans', KMeans(n_clusters=5, n_init=10, random_state=0)),  # Perform clustering
+                            ('model', model)
+                            ])
 
     # Preprocessing of training data, fit model 
-    my_pipeline.fit(X_train, y_train)
+    pipeline.fit(X_train, y_train)
     
-    return my_pipeline
+    return pipeline
 
 def get_pred_odds(probs):
     return 1/probs
@@ -370,3 +359,14 @@ def plot_betting_progress(test_results_df):
 
     # Display the plot
     plt.show()
+
+def load_saved_utils(league):
+    dir_path = f"leagues_v2/{league}/official"
+    features_kmeans_list = load(f"{dir_path}/features_kmeans_list.joblib")
+    kmeans_scaler_list = load(f"{dir_path}/kmeans_scaler_list.joblib")
+    pca_features = load(f"{dir_path}/pca_features.joblib")
+    pca_scaler = load(f"{dir_path}/pca_scaler.joblib")
+    pca = load(f"{dir_path}/pca.joblib")
+    pipeline = load(f"{dir_path}/pipeline.joblib")
+
+    return features_kmeans_list, kmeans_scaler_list, pca_features, pca_scaler, pca, pipeline
