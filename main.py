@@ -1,5 +1,4 @@
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+import pandas as pd
 import utils.builder_functions as bf
 import utils.predictor_functions as pf
 import utils.scraper_functions as sf
@@ -25,6 +24,9 @@ season_games['winner'] = season_games.apply(lambda x: bf.get_winner(x['home_scor
 print('Scrapping BetExplorer...')
 sf.scrape_betexplorer(season_games, league_betexplorer, country_betexplorer)
 season_games.to_csv('testing.csv')
+
+numerical_cols = ['home_xg','home_score','away_score','away_xg']
+season_games[numerical_cols] = season_games[numerical_cols].apply(pd.to_numeric)
 
 # Filter for today and tomorrow's games
 today = dt.now()
