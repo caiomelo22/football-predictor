@@ -1,9 +1,9 @@
 import utils.predictor_functions as pf
 
-league = 'mls'
-seasons = '2018-2024'
-season_start = 2019
-season_end = 2024
+league = 'serie-a'
+seasons = '2019-2024'
+season_start = 2020
+season_end = 2023
 
 for season in range(season_start, season_end):
     # Read the data
@@ -25,7 +25,7 @@ for season in range(season_start, season_end):
     second_mi_scores = pf.make_mi_scores(X_train, y_train)
 
     # Create PCA features
-    X_train, X_test = pf.apply_pca_datasets(X_train, X_test, second_mi_scores)
+    X_train, X_test, _, _, _ = pf.apply_pca_datasets(X_train, X_test, second_mi_scores)
 
     # Run the random search algorithm for a few machine learning models
     pf.get_models_dict(season, league)
