@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 def get_winner(home_score, away_score):
-    if not home_score or not away_score:
+    if home_score is None or away_score is None:
         return None
     elif home_score > away_score:
         return 'H'
