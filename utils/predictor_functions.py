@@ -1,9 +1,6 @@
 import pandas as pd
 import numpy as np
-import json
-from sklearn.discriminant_analysis import StandardScaler
-from sklearn.model_selection import train_test_split, RandomizedSearchCV
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.impute import SimpleImputer
 from sklearn.feature_selection import mutual_info_classif
 import seaborn as sns
@@ -11,18 +8,15 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 from sklearn.decomposition import PCA
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
-from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.ensemble import VotingClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
-import os
-from joblib import dump, load
+from joblib import load
+from IPython.display import display
 import warnings
-from scipy.stats import uniform, randint
 warnings.filterwarnings('ignore')
 print("Setup Complete")
 
@@ -45,7 +39,7 @@ def separate_dataset_info(X):
 
 def get_league_data(league, seasons, season_test):
     # Read the data
-    X_full = pd.read_csv(f'./leagues_v2/{league}/formatted_data/{seasons}.csv', index_col=0)
+    X_full = pd.read_csv(f'./leagues/{league}/formatted_data/{seasons}.csv', index_col=0)
     X_test_full = X_full[X_full['season'] == season_test]
     X_full = X_full[X_full['season'] < season_test]
 
@@ -198,7 +192,7 @@ def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Secon
     return X_train, X_test, features_to_explore, pca_scaler, pca
 
 
-def get_models_dict(season, league):
+def get_models():
     models_dict = {
         'naive_bayes': {
             'estimator': GaussianNB(var_smoothing=1e-7),
@@ -222,7 +216,7 @@ def get_models_dict(season, league):
         voting_classifier_estimators.append((model, models_dict[model]['estimator']))
     models_dict['voting_classifier'] = {'estimator': VotingClassifier(estimators=voting_classifier_estimators, voting='soft')}
         
-    save_model_results(models_dict, season, league)
+    return models_dict
 
 def build_pipeline(X_train, y_train, model):
     # Preprocessing for numerical data
@@ -275,6 +269,7 @@ def get_bet_odds_probs(bet):
 
 def bet_worth_it(probs, odds):
     return True
+    return odds > 1.5
     return get_pred_odds(probs) > odds and odds > 1.5
     
 def get_bet_value_by_row(row, bankroll):
@@ -326,20 +321,6 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000):
 
     return test_results_df
 
-def save_model_results(models_dict, season, league):
-    path = f"leagues_v2/{league}/best_models/{season}"
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-    for model in models_dict.keys():
-        model_path = f"{path}/{model}.joblib"
-        dump(models_dict[model]['estimator'], model_path)
-        del models_dict[model]['estimator']
-
-    json_path = f"{path}/best_models.json"
-    with open(json_path, "w") as file:
-        json.dump(models_dict, file)
-
 def plot_betting_progress(test_results_df):
     accumulated_values = test_results_df['progress']
 
@@ -361,7 +342,7 @@ def plot_betting_progress(test_results_df):
     plt.show()
 
 def load_saved_utils(league):
-    dir_path = f"leagues_v2/{league}/official"
+    dir_path = f"leagues/{league}/official"
     features_kmeans_list = load(f"{dir_path}/features_kmeans_list.joblib")
     kmeans_scaler_list = load(f"{dir_path}/kmeans_scaler_list.joblib")
     pca_features = load(f"{dir_path}/pca_features.joblib")
@@ -370,3 +351,34 @@ def load_saved_utils(league):
     pipeline = load(f"{dir_path}/pipeline.joblib")
 
     return features_kmeans_list, kmeans_scaler_list, pca_features, pca_scaler, pca, pipeline
+
+
+def won_bet(row):
+    return 1 if row['profit'] > 0 else 0    
+
+def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n_games, verbose=1):
+    models_dict = get_models()
+
+    # Only predicting after 15 team games. It's shown that is more profitable
+    X_test_filtered = X_test.reset_index(drop=True)[betting_starts_after_n_games:]
+    y_test_filtered = y_test.reset_index(drop=True)[betting_starts_after_n_games:]
+    odds_test_filtered = odds_test.reset_index(drop=True)[betting_starts_after_n_games:]
+
+    progress_data = []
+    for model in models_dict.keys():
+        print(f"Results for model {model}:")
+        my_pipeline = build_pipeline(X_train, y_train, models_dict[model]['estimator'])
+        if not len(X_test_filtered): continue
+        test_results_df = build_pred_df(my_pipeline, X_test_filtered, y_test_filtered, odds_test_filtered)
+        if verbose > 1: display(test_results_df)
+        if verbose > 1: plot_betting_progress(test_results_df)
+        test_results_df['won'] = test_results_df.apply(lambda x: won_bet(x), axis=1)
+        total_won = test_results_df['won'].sum()
+        progress_data.append([test_results_df['profit'].sum(), total_won/len(test_results_df)])
+        
+    cols = ['profit', 'test_score']
+    profit_df = pd.DataFrame(progress_data, columns=cols, index=models_dict.keys())
+    if verbose > 0: display(profit_df)
+    if verbose > 1: display(test_results_df.describe())
+
+    return my_pipeline
