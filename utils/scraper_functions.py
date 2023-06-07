@@ -114,8 +114,9 @@ def scrape_betexplorer(season_games, league, league_country):
                 date = dt.now() + timedelta(days=1)
             elif not date.split('.')[-1]:
                 date += str(dt.now().year)
+                date = transform_odds_date(date)
                 
-            match_info = [transform_odds_date(date), home_team, home_odds, away_team, away_odds, draw_odds]
+            match_info = [date, home_team, home_odds, away_team, away_odds, draw_odds]
             data_model.append(match_info)
             total_games += 1
         except Exception as e:
@@ -134,13 +135,14 @@ def scrape_betexplorer(season_games, league, league_country):
         print(f"{i}/{len(season_games)}")
         
         try:
-            plus_one_day = odds_df['date'] + timedelta(days=1)
-            minus_one_day = odds_df['date'] - timedelta(days=1)
-            same_date_matches = odds_df[(odds_df['date'] == row['date']) | (minus_one_day == row['date']) | (plus_one_day == row['date'])].reset_index(drop=True)
+            plus_one_day = row['date'] + timedelta(days=1)
+            minus_one_day = row['date'] - timedelta(days=1)
+            same_date_matches = odds_df[(odds_df['date'].dt.date == row['date'].date()) | (minus_one_day.date() == odds_df['date'].dt.date) | (plus_one_day.date() == odds_df['date'].dt.date)].reset_index(drop=True)
+            if not len(same_date_matches): continue
             same_date_matches['matchup_score'] = same_date_matches.apply(lambda x: set_fuzz_score(row['home_team'], row['away_team'], x), axis=1)
             same_date_matches = same_date_matches.sort_values(by='matchup_score', ascending=False).reset_index(drop=True)
             match = same_date_matches.iloc[0]
-
+            
             season_games.at[i, "home_odds"] = match['home_odds']
             season_games.at[i, "away_odds"] = match['away_odds']
             season_games.at[i, "draw_odds"] = match['draw_odds']

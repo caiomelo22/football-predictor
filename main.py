@@ -23,7 +23,6 @@ season_games['winner'] = season_games.apply(lambda x: bf.get_winner(x['home_scor
 # Getting odds for next games
 print('Scrapping BetExplorer...')
 sf.scrape_betexplorer(season_games, league_betexplorer, country_betexplorer)
-season_games.to_csv('testing.csv')
 
 numerical_cols = ['home_xg','home_score','away_score','away_xg']
 season_games[numerical_cols] = season_games[numerical_cols].apply(pd.to_numeric)
