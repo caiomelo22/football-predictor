@@ -394,6 +394,7 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
     progress_data = []
     best_results = -9999
     best_results_df = None
+    best_pipeline = None
     for model in models_dict.keys():
         print(f"Results for model {model}:")
         my_pipeline = build_pipeline(X_train, y_train, models_dict[model]['estimator'])
@@ -404,9 +405,10 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
         test_results_df['won'] = test_results_df.apply(lambda x: won_bet(x), axis=1)
         total_won = test_results_df['won'].sum()
         progress_data.append([test_results_df['profit'].sum(), total_won/len(test_results_df)])
-        if test_results_df.iloc[-1]['won'] > best_results: 
-            best_results = test_results_df.iloc[-1]['won']
+        if test_results_df['profit'].sum() > best_results: 
+            best_results = test_results_df['profit'].sum()
             best_results_df = test_results_df
+            best_pipeline = my_pipeline
         
     cols = ['profit', 'test_score']
     profit_df = pd.DataFrame(progress_data, columns=cols, index=models_dict.keys())
@@ -417,4 +419,4 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
     #     print(f"\n{row['home_team']} x {row['away_team']}: {row['pred']}/{row['winner']} {'WON' if row['won'] else ''}")
     #     print(f"H{row['home_odds']} A{row['away_odds']} D{row['draw_odds']}")
 
-    return my_pipeline
+    return best_pipeline
