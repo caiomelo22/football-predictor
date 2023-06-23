@@ -6,31 +6,36 @@ from sklearn.feature_selection import mutual_info_classif
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
+from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 from sklearn.decomposition import PCA
-from sklearn.ensemble import VotingClassifier
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from joblib import load
+from .filtered_columns import filtered_cols
 from IPython.display import display
 import warnings
+
+from sklearn.svm import SVC
 warnings.filterwarnings('ignore')
 print("Setup Complete")
 
 def separate_dataset_info(X):
-    y = X.outcome
+    y = X.winner
 
-    odds_cols = ['home_odds', 'away_odds', 'draw_odds']
+    odds_cols = ['date','season','home_team','away_team','home_odds', 'away_odds', 'draw_odds']
     odds = X[odds_cols]
     
     for c in odds_cols:
-        odds[c] = pd.to_numeric(odds[c], errors='coerce')
+        if 'odds' in c:
+            odds[c] = pd.to_numeric(odds[c], errors='coerce')
     odds.dropna(inplace=True)
 
-    X.drop(['outcome', 'home_score', 'away_score',
+    X.drop(['winner', 'home_score', 'away_score',
                      'home_odds', 'away_odds', 'draw_odds'], axis=1, inplace=True)
     
     _, numerical_cols = set_numerical_categorical_cols(X)
@@ -40,14 +45,17 @@ def separate_dataset_info(X):
 def get_league_data(league, seasons, season_test):
     # Read the data
     X_full = pd.read_csv(f'./leagues/{league}/formatted_data/{seasons}.csv', index_col=0)
+    X_full.replace(' ', np.nan, inplace=True)
+    X_full = X_full.dropna(subset=['home_odds', 'away_odds', 'draw_odds'], how='any')
     X_test_full = X_full[X_full['season'] == season_test]
     X_full = X_full[X_full['season'] < season_test]
 
     # Remove rows with missing target, separate target from predictors
-    y = X_full.outcome
-    X_full.drop(['outcome', 'home_score', 'away_score', 'home_odds',
+    y = X_full.winner
+    X_full.drop(['winner', 'home_score', 'away_score', 'home_odds',
                 'away_odds', 'draw_odds'], axis=1, inplace=True)
 
+    print(X_test_full[['date','season','home_team','away_team', 'winner']])
     X_test_full, y_test, odds_test = separate_dataset_info(X_test_full)
 
     return X_full, y, X_test_full, y_test, odds_test
@@ -70,9 +78,10 @@ def set_numerical_categorical_cols(X):
 def filter_datasets(X_full, y, X_test_full, categorical_cols, numerical_cols):
     # Keep selected columns only
     my_cols = categorical_cols + numerical_cols
+    my_cols = filtered_cols
     y_train = y.copy()
-    X_train = X_full[numerical_cols]
-    X_test = X_test_full[numerical_cols]
+    X_train = X_full[my_cols]
+    X_test = X_test_full[my_cols]
 
     return X_train, y_train, X_test
 
@@ -208,7 +217,25 @@ def get_models():
             'estimator': LogisticRegression(random_state=0),
             'params': None,
             'score': None
-        }
+        },
+        'svm': {
+            'estimator': SVC(
+                probability=True,
+                random_state=0
+            ),
+            'params': None,
+            'score': None
+        },
+        'random_forest': {
+            'estimator': RandomForestClassifier(random_state=0),
+            'params': None,
+            'score': None
+        },
+        'mlp': {
+            'estimator': MLPClassifier(random_state=0),
+            'params': None,
+            'score': None
+        },
     }
     
     voting_classifier_estimators = []
@@ -238,7 +265,7 @@ def build_pipeline(X_train, y_train, model):
         transformers=[
             ('num', numerical_transformer, numerical_cols),
             ('cat', categorical_transformer, categorical_cols),
-            # ('normalization', scaler, numerical_cols + categorical_cols)
+            ('normalization', scaler, numerical_cols + categorical_cols)
         ])
 
     # Bundle preprocessing and modeling code in a pipeline
@@ -279,7 +306,7 @@ def get_bet_value_by_row(row, bankroll):
 def get_match_profit(row, bankroll):
     odds, probs = get_bet_odds_probs(row)
     bet_value = get_bet_value(probs=probs, odds=odds, bankroll=bankroll)
-    if row['outcome'] == row['pred']:
+    if row['winner'] == row['pred']:
         if bet_worth_it(probs, odds): return (odds*bet_value) - bet_value
         else: return 0
     else:
@@ -365,6 +392,8 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
     odds_test_filtered = odds_test.reset_index(drop=True)[betting_starts_after_n_games:]
 
     progress_data = []
+    best_results = -9999
+    best_results_df = None
     for model in models_dict.keys():
         print(f"Results for model {model}:")
         my_pipeline = build_pipeline(X_train, y_train, models_dict[model]['estimator'])
@@ -375,10 +404,17 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
         test_results_df['won'] = test_results_df.apply(lambda x: won_bet(x), axis=1)
         total_won = test_results_df['won'].sum()
         progress_data.append([test_results_df['profit'].sum(), total_won/len(test_results_df)])
+        if test_results_df.iloc[-1]['won'] > best_results: 
+            best_results = test_results_df.iloc[-1]['won']
+            best_results_df = test_results_df
         
     cols = ['profit', 'test_score']
     profit_df = pd.DataFrame(progress_data, columns=cols, index=models_dict.keys())
     if verbose > 0: display(profit_df)
-    if verbose > 1: display(test_results_df.describe())
+    if verbose > 1: display(best_results_df.describe())
+
+    # for i, row in best_results_df.iterrows():
+    #     print(f"\n{row['home_team']} x {row['away_team']}: {row['pred']}/{row['winner']} {'WON' if row['won'] else ''}")
+    #     print(f"H{row['home_odds']} A{row['away_odds']} D{row['draw_odds']}")
 
     return my_pipeline

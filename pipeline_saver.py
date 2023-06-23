@@ -7,10 +7,10 @@ print("Setup Complete")
 
 save_pipeline = False
 run_random_search = False
-league = 'mls'
+league = 'major-league-soccer'
 seasons = '2018-2024'
-season_test = 2022
-betting_starts_after_n_games = 50
+season_test = 2023
+betting_starts_after_n_games = 0
 
 # Read the data
 X_full, y, X_test_full, y_test, odds_test = pf.get_league_data(league, seasons, season_test)

@@ -62,7 +62,7 @@ def get_historical_stats(games, home_games, away_games, suffix=''):
     if suffix: 
         historical_dict = {f"{key}_{suffix}": value for key, value in historical_dict.items()}
     
-    return dict(zip(historical_keys, historical_vals))
+    return historical_dict
 
 def get_team_previous_games(team, game_date, season, fixtures_df):
     home_previous_games = fixtures_df.loc[(fixtures_df['home_team'] == team) & (fixtures_df['date'] < game_date)]
@@ -127,6 +127,6 @@ def get_team_previous_games_stats(team, season, game_date, scenario, n_last_game
     if any(np.isnan(value) for value in team_stats_dict.values()): return None
     
     return_dict = {**games_dict, **last_games_dict, **outcome_pct_dict, **team_stats_dict}
-    return_dict = {f"{prefix}_{key}": value for key, value in return_dict.items() if not key.startswith(prefix)}
+    return_dict = {f"{prefix}_{key}": value for key, value in return_dict.items()}
     
     return return_dict
