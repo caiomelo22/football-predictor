@@ -1,16 +1,15 @@
 
 import pandas as pd
-import io
-import json
-import os
+import time
 from thefuzz import fuzz
 from datetime import timedelta, datetime as dt
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from .filtered_columns import selected_stats
 
-def scrape_fbref(league, league_id):
+def initialize_driver():
     option = Options()
     # option.headless = True
     options = webdriver.ChromeOptions()
@@ -19,6 +18,19 @@ def scrape_fbref(league, league_id):
     options.add_argument("--disable-blink-features=AutomationControlled")
     driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
     # driver.maximize_window()
+    return driver
+
+def get_teams_squad_id(home_td_index, tds):
+    if len(tds[home_td_index].find_element(By.TAG_NAME, 'a').get_attribute("href").split('/')) > 7:
+        squad_id_index = -3
+    else:
+        squad_id_index = -2
+    home_squad_id = tds[home_td_index].find_element(By.TAG_NAME, 'a').get_attribute("href").split('/')[squad_id_index]
+    away_squad_id = tds[home_td_index+4].find_element(By.TAG_NAME, 'a').get_attribute("href").split('/')[squad_id_index]
+    return home_squad_id, away_squad_id
+
+def scrape_fbref(league, league_id):
+    driver = initialize_driver()
 
     data_model = []
     
@@ -30,6 +42,7 @@ def scrape_fbref(league, league_id):
     fb = driver.find_element(By.CLASS_NAME, 'fb')
     rows = fb.find_elements(By.XPATH, '//table/tbody/tr')
 
+    seasons_squad_ids = []
     total_games = 0
     for i, r in enumerate(rows):
         print(f"{i}/{len(rows)}")
@@ -39,10 +52,13 @@ def scrape_fbref(league, league_id):
             
         if len(tds) == 12:
             date, _, home_team, home_xg, score, away_xg, away_team, _, _, _, _, _ = [t.text for t in tds]
+            home_squad_id, away_squad_id = get_teams_squad_id(2, tds)
         elif len(tds) == 13:
             _, date, _, home_team, home_xg, score, away_xg, away_team, _, _, _, _, _ = [t.text for t in tds]
+            home_squad_id, away_squad_id = get_teams_squad_id(3, tds)
         elif len(tds) == 14:
             _, _, date, _, home_team, home_xg, score, away_xg, away_team, _, _, _, _, _ = [t.text for t in tds]
+            home_squad_id, away_squad_id = get_teams_squad_id(4, tds)
         else: continue
 
         if not home_xg and not away_xg:
@@ -53,19 +69,22 @@ def scrape_fbref(league, league_id):
         else:
             home_score, away_score = score.split('–')
 
+        today = dt.now()
+        tomorrow_date = (today + timedelta(days=1)).date()
+        date_converted = dt.strptime(date, "%Y-%m-%d").date()
+        if date_converted > tomorrow_date: break
+        # elif date_converted >= today.date() and date_converted <= tomorrow_date:
+        
+        seasons_squad_ids.extend([(home_squad_id, home_team), (away_squad_id, away_team)])
         match_info = [date, week, home_team, home_xg, home_score, away_score, away_xg, away_team]
-        match_str = f"{date} ({week}): {home_team} ({home_xg}) {home_score} x {away_score} ({away_xg}) {away_team}"
         data_model.append(match_info)
-#         print(match_str)
         total_games += 1
 
     driver.close()
 
     print(f"Total games:", len(data_model))
-    columns = ['date', 'week', 'home_team', 'home_xg', 'home_score', 'away_score', 'away_xg', 'away_team']
-    season_df = pd.DataFrame(data_model, columns=columns)
     
-    return season_df
+    return data_model, set(seasons_squad_ids)
 
 def transform_odds_date(date):
     return dt.strptime(date, '%d.%m.%Y')
@@ -76,14 +95,7 @@ def set_fuzz_score(home_team, away_team, row):
     return home_score + away_score
 
 def scrape_betexplorer(season_games, league, league_country):
-    option = Options()
-    # option.headless = True
-    options = webdriver.ChromeOptions()
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
-    # driver.maximize_window()
+    driver = initialize_driver()
 
     data_model = []
     
@@ -122,6 +134,8 @@ def scrape_betexplorer(season_games, league, league_country):
         except Exception as e:
             continue
 
+    driver.close()
+
     columns = ['date', 'home_team', 'home_odds', 'away_team', 'away_odds', 'draw_odds']
     odds_df = pd.DataFrame(data_model, columns=columns)
 
@@ -149,3 +163,68 @@ def scrape_betexplorer(season_games, league, league_country):
             
         except:
             continue
+
+def get_value(attr, tds, cols):
+    col_index = cols.index(attr)
+    return tds[col_index-1].text
+
+def save_game_stats(team, opp_team, date, venue, stats, cols, games_dict):
+    if venue == 'Home':
+        home_team, away_team = team, opp_team
+        prefixed_cols = ['home_' + col for col in cols]
+    else:
+        away_team, home_team = team, opp_team
+        prefixed_cols = ['away_' + col for col in cols]
+    
+    stats_dict = {col: stat for col, stat in zip(prefixed_cols, stats)}
+    game_key = (home_team, away_team, date)
+    if game_key in games_dict:
+        games_dict[game_key].update(stats_dict)
+    else:
+        games_dict[game_key] = stats_dict
+    
+def scrape_advanced_stats(league_id, season_test, seasons_squad_ids):
+    driver = initialize_driver()
+    games_stats_dict = {}
+    for squad_idx, si in enumerate(seasons_squad_ids):
+        squad_id, team_name = si
+        for stat_type in selected_stats.keys():
+            print(f"{squad_idx}/{len(seasons_squad_ids)-1} --> {team_name}:{stat_type}")
+            url = f"https://fbref.com/en/squads/{squad_id}/{season_test}/matchlogs/c{league_id}/{stat_type}"
+            print(url)
+            driver.get(url)
+
+            rows = driver.find_elements(By.XPATH, '//table/tbody/tr')
+            thead = driver.find_elements(By.XPATH, '//table/thead/tr')[1]
+            cols = thead.find_elements(By.XPATH, './/child::th')
+            cols = [c.text for c in cols]
+
+            for i, r in enumerate(rows):
+                if not r.text: continue
+                tds = r.find_elements(By.XPATH, './/child::td')
+                if not len(tds): continue
+                date = r.find_element(By.XPATH, './/child::th').text
+
+                opp_team = get_value('Opponent', tds, cols)
+                venue = get_value('Venue', tds, cols)
+
+                stats = []
+                for stat_col in selected_stats[stat_type]:
+                    stats.append(get_value(stat_col, tds, cols))
+
+                save_game_stats(team_name, opp_team, date, venue, stats, selected_stats[stat_type], games_stats_dict)
+
+            time.sleep(6)
+
+    driver.close()
+
+    return games_stats_dict
+
+def complete_stats(game_stats, reg_cols, games_stats_dict):
+    reg_dict = {col: stat for col, stat in zip(reg_cols, game_stats)}
+    game_key = (reg_dict['home_team'], reg_dict['away_team'], reg_dict['date'])
+    advanced_stats_dict = games_stats_dict.get(game_key)
+    if not advanced_stats_dict: return reg_dict
+
+    game_dict = {**reg_dict, **advanced_stats_dict}
+    return game_dict

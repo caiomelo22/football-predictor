@@ -61,3 +61,21 @@ filtered_cols = [
         'away_team_Succ%',
     ]
     
+selected_stats = {
+    'shooting': [
+        'Sh',
+        'SoT',
+        'SoT%',
+        'G/Sh',
+        'G/SoT',
+        'Dist',
+    ],
+    'gca': [
+        'SCA'
+    ],
+    'possession': [
+        'Poss',
+        'Succ',
+        'Succ%'
+    ],
+}
