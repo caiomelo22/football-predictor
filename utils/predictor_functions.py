@@ -19,6 +19,8 @@ from joblib import load
 from .filtered_columns import filtered_cols
 from IPython.display import display
 import warnings
+from keras.models import Sequential
+from keras.layers import Dense
 
 from sklearn.svm import SVC
 warnings.filterwarnings('ignore')
@@ -201,7 +203,7 @@ def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Secon
     return X_train, X_test, features_to_explore, pca_scaler, pca
 
 
-def get_models():
+def get_models(X_train):
     models_dict = {
         'naive_bayes': {
             'estimator': GaussianNB(var_smoothing=1e-7),
@@ -236,6 +238,11 @@ def get_models():
             'params': None,
             'score': None
         },
+        # 'neural_network': {
+        #     'estimator': build_neural_network(X_train),
+        #     'params': None,
+        #     'score': None
+        # },
     }
     
     voting_classifier_estimators = []
@@ -245,7 +252,7 @@ def get_models():
         
     return models_dict
 
-def build_pipeline(X_train, y_train, model):
+def build_pipeline(X_train, y_train, model, epochs=10, batch_size=32):
     # Preprocessing for numerical data
     numerical_transformer = SimpleImputer(strategy='median')
 
@@ -268,6 +275,13 @@ def build_pipeline(X_train, y_train, model):
             ('normalization', scaler, numerical_cols + categorical_cols)
         ])
 
+    # Create a neural network model
+    if isinstance(model, Sequential):
+        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+        fit_kwargs = {'model__epochs': epochs, 'model__batch_size': batch_size}
+    else:
+        fit_kwargs = {}
+
     # Bundle preprocessing and modeling code in a pipeline
     pipeline = Pipeline(steps=
                            [('preprocessor', preprocessor),
@@ -277,8 +291,13 @@ def build_pipeline(X_train, y_train, model):
                             ('model', model)
                             ])
 
-    # Preprocessing of training data, fit model 
-    pipeline.fit(X_train, y_train)
+    # Preprocessing of training data, fit model
+    pipeline.fit(X_train, y_train, **fit_kwargs)
+    
+    # Add the encoding and decoding functions to the pipeline object
+    if isinstance(model, Sequential):
+        pipeline.encode_labels = encode_labels
+        pipeline.decode_labels = decode_labels
     
     return pipeline
 
@@ -384,7 +403,7 @@ def won_bet(row):
     return 1 if row['profit'] > 0 else 0    
 
 def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n_games, verbose=1):
-    models_dict = get_models()
+    models_dict = get_models(X_train)
 
     # Only predicting after 15 team games. It's shown that is more profitable
     X_test_filtered = X_test.reset_index(drop=True)[betting_starts_after_n_games:]
@@ -420,3 +439,42 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
     #     print(f"H{row['home_odds']} A{row['away_odds']} D{row['draw_odds']}")
 
     return best_pipeline
+
+# Convert the labels to one-hot encoded vectors
+def encode_labels(labels):
+    encoded_labels = np.zeros((len(labels), 3))
+    for i, label in enumerate(labels):
+        if label == 'H':
+            encoded_labels[i] = [1, 0, 0]
+        elif label == 'D':
+            encoded_labels[i] = [0, 1, 0]
+        elif label == 'A':
+            encoded_labels[i] = [0, 0, 1]
+    return encoded_labels
+
+
+# Decode the predictions
+def decode_labels(predictions):
+    decoded_labels = []
+    for prediction in predictions:
+        if np.argmax(prediction) == 0:
+            decoded_labels.append('H')
+        elif np.argmax(prediction) == 1:
+            decoded_labels.append('D')
+        elif np.argmax(prediction) == 2:
+            decoded_labels.append('A')
+    return decoded_labels
+
+def build_neural_network(X_train):
+    # Create a neural network model
+    model = Sequential()
+
+    # Add layers to the model
+    model.add(Dense(64, input_dim=X_train.shape[1], activation='relu'))
+    model.add(Dense(32, activation='relu'))
+    model.add(Dense(3, activation='softmax'))
+
+    # Compile the model
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+    return model
