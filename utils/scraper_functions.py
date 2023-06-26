@@ -104,7 +104,7 @@ def scrape_betexplorer(season_games, league, league_country):
 
     driver.maximize_window()
 
-    table = driver.find_element(By.XPATH, '/html/body/div[4]/div[5]/div/div/div[1]/section/div[3]/div/table')
+    table = driver.find_element(By.TAG_NAME, 'table')
     rows = table.find_elements(By.XPATH, './/tbody/tr')
 
     total_games = 0
@@ -183,12 +183,12 @@ def save_game_stats(team, opp_team, date, venue, stats, cols, games_dict):
     else:
         games_dict[game_key] = stats_dict
     
-def scrape_advanced_stats(league_id, season_test, seasons_squad_ids):
+def scrape_advanced_stats(league_id, season_test, seasons_squad_ids, league_selected_stats):
     driver = initialize_driver()
     games_stats_dict = {}
     for squad_idx, si in enumerate(seasons_squad_ids):
         squad_id, team_name = si
-        for stat_type in selected_stats.keys():
+        for stat_type in league_selected_stats.keys():
             print(f"{squad_idx}/{len(seasons_squad_ids)-1} --> {team_name}:{stat_type}")
             url = f"https://fbref.com/en/squads/{squad_id}/{season_test}/matchlogs/c{league_id}/{stat_type}"
             print(url)
@@ -209,10 +209,10 @@ def scrape_advanced_stats(league_id, season_test, seasons_squad_ids):
                 venue = get_value('Venue', tds, cols)
 
                 stats = []
-                for stat_col in selected_stats[stat_type]:
+                for stat_col in league_selected_stats[stat_type]:
                     stats.append(get_value(stat_col, tds, cols))
 
-                save_game_stats(team_name, opp_team, date, venue, stats, selected_stats[stat_type], games_stats_dict)
+                save_game_stats(team_name, opp_team, date, venue, stats, league_selected_stats[stat_type], games_stats_dict)
 
             time.sleep(6)
 
