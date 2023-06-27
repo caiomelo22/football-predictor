@@ -146,7 +146,7 @@ def train_kmeans(X_train, features_to_explore):
         kmeans = KMeans(n_clusters=5, n_init=10, random_state=0)
         X_train[f"Cluster_{i+1}"] = kmeans.fit_predict(scale_dataset(X_train.loc[:, features_to_explore[i:i+2]], kmeans_scaler))
 
-        X_train[f"Cluster_{i+1}"] = X_train[f"Cluster_{i+1}"].astype('int')
+        X_train[f"Cluster_{i+1}"] = X_train[f"Cluster_{i+1}"].astype('int32')
 
         kmeans_scaler_list.append(kmeans_scaler)
         features_kmeans_list.append((features_to_explore[i:i+2], kmeans))
@@ -157,7 +157,7 @@ def apply_kmeans(X_test, kmeans_scaler_list, features_kmeans_list):
     for i, fk in enumerate(features_kmeans_list):
         features, kmeans = fk
         X_test[f"Cluster_{i+1}"] = kmeans.predict(scale_dataset(X_test.loc[:, features], kmeans_scaler_list[i], just_transform=True))
-        X_test[f"Cluster_{i+1}"] = X_test[f"Cluster_{i+1}"].astype('int')
+        X_test[f"Cluster_{i+1}"] = X_test[f"Cluster_{i+1}"].astype('int32')
 
     return X_test
 
