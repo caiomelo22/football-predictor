@@ -182,6 +182,7 @@ def train_pca(X_train, mi_scores, min_mi_score=0.001):
     # Convert to df
     component_names = [f"PC{i+1}" for i in range(X_pca.shape[1])]
     X_pca = pd.DataFrame(X_pca, columns=component_names, index=X_train.index)
+    X_pca = X_pca.astype('int64')
 
     X_final = pd.concat([X_train, X_pca], axis=1)
     return X_final, features_to_explore, pca_scaler, pca
@@ -192,6 +193,7 @@ def apply_pca(X_test, scaler, pca, features_to_explore):
     # Convert to df
     component_names = [f"PC{i+1}" for i in range(X_pca.shape[1])]
     X_pca = pd.DataFrame(X_pca, columns=component_names, index=X_test.index)
+    X_pca = X_pca.astype('int64')
 
     X_final = pd.concat([X_test, X_pca], axis=1)
     return X_final
