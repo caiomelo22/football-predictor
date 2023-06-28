@@ -67,12 +67,13 @@ def set_numerical_categorical_cols(X):
     # "Cardinality" means the number of unique values in a column
     # Select categorical columns with relatively low cardinality (convenient but arbitrary)
     categorical_cols = [cname for cname in X.columns if
-                        X[cname].nunique() < 10 and
-                        X[cname].dtype == "object"]
+                        (X[cname].nunique() < 10 and
+                        X[cname].dtype == "object") or 
+                        X[cname].dtype in ['int64', 'int32']]
 
     # Select numerical columns
     numerical_cols = [cname for cname in X.columns if
-                      X[cname].dtype in ['int64', 'float64']]
+                      X[cname].dtype in ['float64']]
 
     return categorical_cols, numerical_cols
 
@@ -205,7 +206,7 @@ def apply_pca_datasets(X_train, X_test, mi_scores, min_mi_score=0.001):  # Secon
     return X_train, X_test, features_to_explore, pca_scaler, pca
 
 
-def get_models(X_train):
+def get_models():
     models_dict = {
         'naive_bayes': {
             'estimator': GaussianNB(var_smoothing=1e-7),
@@ -240,25 +241,28 @@ def get_models(X_train):
             'params': None,
             'score': None
         },
-        # 'neural_network': {
-        #     'estimator': build_neural_network(X_train),
-        #     'params': None,
-        #     'score': None
-        # },
+        'neural_network': {
+            'estimator': create_neural_network(),
+            'params': None,
+            'score': None
+        },
     }
     
     voting_classifier_estimators = []
     for model in models_dict.keys():
-        voting_classifier_estimators.append((model, models_dict[model]['estimator']))
-    models_dict['voting_classifier'] = {'estimator': VotingClassifier(estimators=voting_classifier_estimators, voting='soft')}
+        if not isinstance(models_dict[model]['estimator'], Sequential): voting_classifier_estimators.append((model, models_dict[model]['estimator']))
+    if voting_classifier_estimators: models_dict['voting_classifier'] = {'estimator': VotingClassifier(estimators=voting_classifier_estimators, voting='soft')}
         
     return models_dict
 
 def build_pipeline(X_train, y_train, model, epochs=10, batch_size=32):
-    # Preprocessing for numerical data
-    numerical_transformer = SimpleImputer(strategy='median')
-
     categorical_cols, numerical_cols = set_numerical_categorical_cols(X_train)
+
+    # Preprocessing for numerical data
+    numerical_transformer = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='median')),
+        ('scaler', MinMaxScaler())
+    ])
 
     # Preprocessing for categorical data
     categorical_transformer = Pipeline(steps=[
@@ -266,21 +270,22 @@ def build_pipeline(X_train, y_train, model, epochs=10, batch_size=32):
         ('onehot', OneHotEncoder(handle_unknown='ignore', sparse=False))
     ])
 
-    # Define normalization function
-    scaler = MinMaxScaler()
-
     # Bundle preprocessing for numerical and categorical data
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', numerical_transformer, numerical_cols),
             ('cat', categorical_transformer, categorical_cols),
-            ('normalization', scaler, numerical_cols + categorical_cols)
         ])
 
     # Create a neural network model
     if isinstance(model, Sequential):
-        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+        X_train_transformed_input = preprocessor.fit_transform(X_train)
+        build_neural_network(model, X_train_transformed_input)
         fit_kwargs = {'model__epochs': epochs, 'model__batch_size': batch_size}
+
+        # Encode the target variable
+        encoded_labels = encode_labels(y_train)
+        y_train = encoded_labels
     else:
         fit_kwargs = {}
 
@@ -308,7 +313,7 @@ def get_pred_odds(probs):
 
 def get_bet_value(odds, probs, bankroll):
     return bankroll * 0.05
-    return (bankroll*(probs - ((1-probs)/odds)))/6
+    return (bankroll*(probs - ((1-probs)/odds)))*1
 
 def get_bet_odds_probs(bet):
     if bet['pred'] == 'H': return bet['home_odds'], bet['home_probs']
@@ -333,19 +338,26 @@ def get_match_profit(row, bankroll):
     else:
         return -bet_value
 
-def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000):
-    preds_test = my_pipeline.predict(X_test)
+def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000, is_neural_net=False):
+    if is_neural_net:
+        test_probs = my_pipeline.predict(X_test)
+        preds_test = my_pipeline.decode_labels(test_probs.argmax(axis=1))
+        preds_test_labels = my_pipeline.decode_labels(preds_test)
+        labels = np.unique(np.concatenate((y_test, preds_test_labels)))
 
-    report = classification_report(y_test, preds_test)
+    else:
+        test_probs = my_pipeline.predict_proba(X_test)
+        preds_test = my_pipeline.predict(X_test)
+        labels = my_pipeline.classes_
+
     print('Classification Report:')
+    report = classification_report(y_test, preds_test)
     print(report)
 
-    labels = ["H", "D", "A"]
-    matrix = confusion_matrix(y_test, preds_test, labels=labels)
     print('Confusion Matrix:')
+    matrix = confusion_matrix(y_test, preds_test, labels=labels)
     print(matrix)
 
-    test_probs = my_pipeline.predict_proba(X_test)
     probs_test_df = pd.DataFrame(test_probs, index=y_test.index, columns=['away_probs', 'draw_probs', 'home_probs'])
     preds_test_df = pd.DataFrame(preds_test, index=y_test.index, columns=['pred'])
     test_results_df = pd.concat([y_test, preds_test_df, probs_test_df, odds_test], axis=1)
@@ -405,7 +417,7 @@ def won_bet(row):
     return 1 if row['profit'] > 0 else 0    
 
 def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n_games, verbose=1):
-    models_dict = get_models(X_train)
+    models_dict = get_models()
 
     # Only predicting after 15 team games. It's shown that is more profitable
     X_test_filtered = X_test.reset_index(drop=True)[betting_starts_after_n_games:]
@@ -417,15 +429,19 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
     best_results_df = None
     best_pipeline = None
     for model in models_dict.keys():
-        print(f"Results for model {model}:")
+        print(f"\nResults for model {model}:")
         my_pipeline = build_pipeline(X_train, y_train, models_dict[model]['estimator'])
         if not len(X_test_filtered): continue
-        test_results_df = build_pred_df(my_pipeline, X_test_filtered, y_test_filtered, odds_test_filtered)
+
+        test_results_df = build_pred_df(my_pipeline, X_test_filtered, y_test_filtered, odds_test_filtered, is_neural_net=isinstance(models_dict[model]['estimator'], Sequential))
+        
         if verbose > 1: display(test_results_df)
         if verbose > 1: plot_betting_progress(test_results_df)
+
         test_results_df['won'] = test_results_df.apply(lambda x: won_bet(x), axis=1)
         total_won = test_results_df['won'].sum()
         progress_data.append([test_results_df['profit'].sum(), total_won/len(test_results_df)])
+        
         if test_results_df['profit'].sum() > best_results: 
             best_results = test_results_df['profit'].sum()
             best_results_df = test_results_df
@@ -467,10 +483,12 @@ def decode_labels(predictions):
             decoded_labels.append('A')
     return decoded_labels
 
-def build_neural_network(X_train):
+def create_neural_network():
     # Create a neural network model
     model = Sequential()
+    return model
 
+def build_neural_network(model, X_train):
     # Add layers to the model
     model.add(Dense(64, input_dim=X_train.shape[1], activation='relu'))
     model.add(Dense(32, activation='relu'))
