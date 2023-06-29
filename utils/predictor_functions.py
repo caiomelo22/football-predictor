@@ -213,17 +213,20 @@ def get_models():
         'naive_bayes': {
             'estimator': GaussianNB(var_smoothing=1e-7),
             'params': None,
-            'score': None
+            'score': None,
+            'voting': False
         },
         'knn': {
             'estimator': KNeighborsClassifier(n_neighbors=10),
             'params': None,
-            'score': None
+            'score': None,
+            'voting': True
         },
         'logistic_regression': {
             'estimator': LogisticRegression(random_state=0),
             'params': None,
-            'score': None
+            'score': None,
+            'voting': False
         },
         'svm': {
             'estimator': SVC(
@@ -231,28 +234,32 @@ def get_models():
                 random_state=0
             ),
             'params': None,
-            'score': None
+            'score': None,
+            'voting': True
         },
         'random_forest': {
             'estimator': RandomForestClassifier(random_state=0),
             'params': None,
-            'score': None
+            'score': None,
+            'voting': True
         },
         'mlp': {
             'estimator': MLPClassifier(random_state=0),
             'params': None,
-            'score': None
+            'score': None,
+            'voting': False
         },
         'neural_network': {
             'estimator': create_neural_network(),
             'params': None,
-            'score': None
+            'score': None,
+            'voting': False
         },
     }
     
     voting_classifier_estimators = []
     for model in models_dict.keys():
-        if not isinstance(models_dict[model]['estimator'], Sequential): voting_classifier_estimators.append((model, models_dict[model]['estimator']))
+        if models_dict[model]['voting'] and not isinstance(models_dict[model]['estimator'], Sequential): voting_classifier_estimators.append((model, models_dict[model]['estimator']))
     if voting_classifier_estimators: models_dict['voting_classifier'] = {'estimator': VotingClassifier(estimators=voting_classifier_estimators, voting='soft')}
         
     return models_dict
@@ -325,7 +332,7 @@ def get_bet_value(odds, probs, bankroll):
     # return bankroll * 0.05
     q = 1 - probs  # Probability of losing
     b = odds - 1  # Net odds received on the bet (including the stake)
-    return (bankroll * (probs * b - q)) / b
+    return ((bankroll * (probs * b - q)) / b) * 0.25
 
 def get_bet_odds_probs(bet):
     if bet['pred'] == 'H': return bet['home_odds'], bet['home_probs']
@@ -349,46 +356,6 @@ def get_match_profit(row):
         else: return 0
     else:
         return -row['bet_worth']
-    
-def apply_betting_strategy(test_results_df, bankroll):
-    # Group the games by date
-    grouped_df = test_results_df.groupby('date')
-
-    for date, games_batch in grouped_df:
-        batch_size = len(games_batch)
-
-        # Calculate the bet value for the batch
-        odds_probs = games_batch.apply(get_bet_odds_probs, axis=1)
-        bet_values = [get_bet_value(odds, probs, bankroll) for odds, probs in odds_probs]
-
-        # Separate positive and negative value bets
-        positive_bets = [val for val in bet_values if val > 0]
-        negative_bets = [val for val in bet_values if val < 0]
-
-        # Calculate the total bet value for positive value bets
-        total_positive_bet_value = sum(positive_bets)
-
-        # Calculate the total bet value for negative value bets
-        total_negative_bet_value = sum(negative_bets) if negative_bets else 0
-
-        # Calculate the bet worth for positive value bets
-        positive_bet_worth = total_positive_bet_value / len(positive_bets) if positive_bets else 0
-
-        # Distribute the positive bet worth among the positive value bets
-        if len(positive_bets):
-            games_batch.loc[games_batch['bet_worth'] > 0, 'bet_worth'] = positive_bet_worth
-
-        # Calculate the bet worth for negative value bets
-        negative_bet_worth = total_negative_bet_value / len(negative_bets) if negative_bets else 0
-
-        # Distribute the negative bet worth among the negative value bets
-        if len(negative_bets):
-            games_batch.loc[games_batch['bet_worth'] < 0, 'bet_worth'] = negative_bet_worth
-
-        # Update the corresponding rows in the original test_results_df
-        test_results_df.loc[games_batch.index, 'bet_worth'] = games_batch['bet_worth']
-
-    return test_results_df
 
 
 def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000, is_neural_net=False):
@@ -420,7 +387,6 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000, is_neur
         n_times = len(preds_test_df[preds_test_df['pred'] == l])
         print(f"Times when {l} was predicted: {n_times} ({round(n_times/len(preds_test_df), 2)})")
 
-    # test_results_df = apply_betting_strategy(test_results_df, bankroll)
     test_results_df['bet_worth'] = test_results_df.apply(lambda x: get_bet_value_by_row(x, bankroll), axis=1)
     test_results_df['profit'] = test_results_df.apply(lambda x: get_match_profit(x), axis=1)
     test_results_df['progress'] = [bankroll] + test_results_df['profit'].cumsum().add(bankroll).tolist()[1:]
