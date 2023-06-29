@@ -9,19 +9,16 @@ print("Setup Complete")
 
 save_pipeline = False
 run_random_search = False
-league = 'serie-a'
-seasons = '2019-2024'
-season_test = 2023
+league = 'major-league-soccer'
+seasons = '2018-2024'
+season_test = 2019
 betting_starts_after_n_games = 0
 
 # Read the data
 X_full, y, X_test_full, y_test, odds_test = pf.get_league_data(league, seasons, season_test)
 
-# Define categorical and numerical columns
-categorical_cols, numerical_cols = pf.set_numerical_categorical_cols(X_full)
-
 # Keep selected columns only
-X_train, y_train, X_test = pf.filter_datasets(X_full, y, X_test_full, categorical_cols, numerical_cols)
+X_train, y_train, X_test = pf.filter_datasets(X_full, y, X_test_full)
 
 # First mi scores
 first_mi_scores = pf.make_mi_scores(X_train, y_train)

@@ -40,7 +40,7 @@ def separate_dataset_info(X):
     X.drop(['winner', 'home_score', 'away_score',
                      'home_odds', 'away_odds', 'draw_odds'], axis=1, inplace=True)
     
-    _, numerical_cols = set_numerical_categorical_cols(X)
+    _, numerical_cols, _ = set_numerical_categorical_cols(X)
     return X[numerical_cols], y, odds
 
 
@@ -68,19 +68,21 @@ def set_numerical_categorical_cols(X):
     # Select categorical columns with relatively low cardinality (convenient but arbitrary)
     categorical_cols = [cname for cname in X.columns if
                         (X[cname].nunique() < 10 and
-                        X[cname].dtype == "object") or 
-                        X[cname].dtype in ['int64', 'int32']]
+                        X[cname].dtype in ['object'])]
 
     # Select numerical columns
     numerical_cols = [cname for cname in X.columns if
                       X[cname].dtype in ['float64']]
 
-    return categorical_cols, numerical_cols
+    # Select int columns
+    int_cols = [cname for cname in X.columns if
+                      X[cname].dtype in ['int64', 'int32']]
+
+    return categorical_cols, numerical_cols, int_cols
 
 
-def filter_datasets(X_full, y, X_test_full, categorical_cols, numerical_cols):
+def filter_datasets(X_full, y, X_test_full):
     # Keep selected columns only
-    my_cols = categorical_cols + numerical_cols
     my_cols = filtered_cols
     y_train = y.copy()
     X_train = X_full[my_cols]
@@ -256,10 +258,16 @@ def get_models():
     return models_dict
 
 def build_pipeline(X_train, y_train, model, epochs=10, batch_size=32):
-    categorical_cols, numerical_cols = set_numerical_categorical_cols(X_train)
+    categorical_cols, numerical_cols, int_cols = set_numerical_categorical_cols(X_train)
 
     # Preprocessing for numerical data
     numerical_transformer = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='median')),
+        ('scaler', MinMaxScaler())
+    ])
+
+    # Preprocessing for int data
+    int_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='median')),
         ('scaler', MinMaxScaler())
     ])
@@ -274,11 +282,13 @@ def build_pipeline(X_train, y_train, model, epochs=10, batch_size=32):
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', numerical_transformer, numerical_cols),
+            ('int', int_transformer, int_cols),
             ('cat', categorical_transformer, categorical_cols),
         ])
 
     # Create a neural network model
     if isinstance(model, Sequential):
+        # X_train_transformed_input = X_train
         X_train_transformed_input = preprocessor.fit_transform(X_train)
         build_neural_network(model, X_train_transformed_input)
         fit_kwargs = {'model__epochs': epochs, 'model__batch_size': batch_size}
@@ -312,8 +322,10 @@ def get_pred_odds(probs):
     return 1/probs
 
 def get_bet_value(odds, probs, bankroll):
-    return bankroll * 0.05
-    return (bankroll*(probs - ((1-probs)/odds)))*1
+    # return bankroll * 0.05
+    q = 1 - probs  # Probability of losing
+    b = odds - 1  # Net odds received on the bet (including the stake)
+    return (bankroll * (probs * b - q)) / b
 
 def get_bet_odds_probs(bet):
     if bet['pred'] == 'H': return bet['home_odds'], bet['home_probs']
@@ -329,14 +341,55 @@ def get_bet_value_by_row(row, bankroll):
     odds, probs = get_bet_odds_probs(row)
     return get_bet_value(odds, probs, bankroll)
 
-def get_match_profit(row, bankroll):
+def get_match_profit(row):
     odds, probs = get_bet_odds_probs(row)
-    bet_value = get_bet_value(probs=probs, odds=odds, bankroll=bankroll)
+    if row['bet_worth'] < 0: return 0
     if row['winner'] == row['pred']:
-        if bet_worth_it(probs, odds): return (odds*bet_value) - bet_value
+        if bet_worth_it(probs, odds): return (odds*row['bet_worth']) - row['bet_worth']
         else: return 0
     else:
-        return -bet_value
+        return -row['bet_worth']
+    
+def apply_betting_strategy(test_results_df, bankroll):
+    # Group the games by date
+    grouped_df = test_results_df.groupby('date')
+
+    for date, games_batch in grouped_df:
+        batch_size = len(games_batch)
+
+        # Calculate the bet value for the batch
+        odds_probs = games_batch.apply(get_bet_odds_probs, axis=1)
+        bet_values = [get_bet_value(odds, probs, bankroll) for odds, probs in odds_probs]
+
+        # Separate positive and negative value bets
+        positive_bets = [val for val in bet_values if val > 0]
+        negative_bets = [val for val in bet_values if val < 0]
+
+        # Calculate the total bet value for positive value bets
+        total_positive_bet_value = sum(positive_bets)
+
+        # Calculate the total bet value for negative value bets
+        total_negative_bet_value = sum(negative_bets) if negative_bets else 0
+
+        # Calculate the bet worth for positive value bets
+        positive_bet_worth = total_positive_bet_value / len(positive_bets) if positive_bets else 0
+
+        # Distribute the positive bet worth among the positive value bets
+        if len(positive_bets):
+            games_batch.loc[games_batch['bet_worth'] > 0, 'bet_worth'] = positive_bet_worth
+
+        # Calculate the bet worth for negative value bets
+        negative_bet_worth = total_negative_bet_value / len(negative_bets) if negative_bets else 0
+
+        # Distribute the negative bet worth among the negative value bets
+        if len(negative_bets):
+            games_batch.loc[games_batch['bet_worth'] < 0, 'bet_worth'] = negative_bet_worth
+
+        # Update the corresponding rows in the original test_results_df
+        test_results_df.loc[games_batch.index, 'bet_worth'] = games_batch['bet_worth']
+
+    return test_results_df
+
 
 def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000, is_neural_net=False):
     if is_neural_net:
@@ -367,17 +420,19 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000, is_neur
         n_times = len(preds_test_df[preds_test_df['pred'] == l])
         print(f"Times when {l} was predicted: {n_times} ({round(n_times/len(preds_test_df), 2)})")
 
+    # test_results_df = apply_betting_strategy(test_results_df, bankroll)
     test_results_df['bet_worth'] = test_results_df.apply(lambda x: get_bet_value_by_row(x, bankroll), axis=1)
-    test_results_df['profit'] = test_results_df.apply(lambda x: get_match_profit(x, bankroll), axis=1)
+    test_results_df['profit'] = test_results_df.apply(lambda x: get_match_profit(x), axis=1)
     test_results_df['progress'] = [bankroll] + test_results_df['profit'].cumsum().add(bankroll).tolist()[1:]
 
-    print('\nModel profit:', test_results_df.profit.sum())
+    print('\nTotal bets:', len(test_results_df[test_results_df['bet_worth'] > 0]))
+    print('Model profit:', test_results_df.profit.sum())
     negative_consecutive_count = test_results_df['profit'].lt(0).astype(int).groupby((test_results_df['profit'] >= 0).cumsum()).sum().max()
     print('Maximum negative sequence: ', negative_consecutive_count)
     positive_consecutive_count = test_results_df['profit'].gt(0).astype(int).groupby((test_results_df['profit'] < 0).cumsum()).sum().max()
     print('Maximum positive sequence: ', positive_consecutive_count)
     print('Maximum bet worth:', test_results_df.bet_worth.max())
-    print('Minimum bet worth:', test_results_df.bet_worth.min())
+    print('Minimum bet worth:', test_results_df[test_results_df['bet_worth'] > 0].bet_worth.min())
 
     return test_results_df
 
@@ -414,7 +469,7 @@ def load_saved_utils(league):
 
 
 def won_bet(row):
-    return 1 if row['profit'] > 0 else 0    
+    return 1 if row['pred'] == row['winner'] else 0    
 
 def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n_games, verbose=1):
     models_dict = get_models()
@@ -433,15 +488,16 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
         my_pipeline = build_pipeline(X_train, y_train, models_dict[model]['estimator'])
         if not len(X_test_filtered): continue
 
-        test_results_df = build_pred_df(my_pipeline, X_test_filtered, y_test_filtered, odds_test_filtered, is_neural_net=isinstance(models_dict[model]['estimator'], Sequential))
+        is_neural_net = isinstance(models_dict[model]['estimator'], Sequential)
+        test_results_df = build_pred_df(my_pipeline, X_test_filtered, y_test_filtered, odds_test_filtered, is_neural_net=is_neural_net)
         
         if verbose > 1: display(test_results_df)
         if verbose > 1: plot_betting_progress(test_results_df)
 
         test_results_df['won'] = test_results_df.apply(lambda x: won_bet(x), axis=1)
-        total_won = test_results_df['won'].sum()
-        progress_data.append([test_results_df['profit'].sum(), total_won/len(test_results_df)])
-        
+        total_won = test_results_df[test_results_df['profit'] != 0]['won'].sum()
+        progress_data.append([test_results_df['profit'].sum(), total_won/len(test_results_df[test_results_df['profit'] != 0])])
+
         if test_results_df['profit'].sum() > best_results: 
             best_results = test_results_df['profit'].sum()
             best_results_df = test_results_df
@@ -454,6 +510,8 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
 
     # for i, row in best_results_df.iterrows():
     #     print(f"\n{row['home_team']} x {row['away_team']}: {row['pred']}/{row['winner']} {'WON' if row['won'] else ''}")
+    #     print(f"Bet worth: {row['bet_worth']}")
+    #     print(f"Profit: {row['profit']}")
     #     print(f"H{row['home_odds']} A{row['away_odds']} D{row['draw_odds']}")
 
     return best_pipeline
