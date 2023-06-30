@@ -217,7 +217,7 @@ def get_models():
             'voting': False
         },
         'knn': {
-            'estimator': KNeighborsClassifier(n_neighbors=10),
+            'estimator': KNeighborsClassifier(n_neighbors=150),
             'params': None,
             'score': None,
             'voting': True
@@ -235,10 +235,10 @@ def get_models():
             ),
             'params': None,
             'score': None,
-            'voting': True
+            'voting': False
         },
         'random_forest': {
-            'estimator': RandomForestClassifier(random_state=0),
+            'estimator': RandomForestClassifier(random_state=0, n_estimators=750),
             'params': None,
             'score': None,
             'voting': True
@@ -340,9 +340,8 @@ def get_bet_odds_probs(bet):
     if bet['pred'] == 'D': return bet['draw_odds'], bet['draw_probs']
 
 def bet_worth_it(probs, odds):
-    return True
-    return odds > 1.5
-    return get_pred_odds(probs) > odds and odds > 1.5
+    # return True
+    return odds > 1.7
     
 def get_bet_value_by_row(row, bankroll):
     odds, probs = get_bet_odds_probs(row)
@@ -350,15 +349,14 @@ def get_bet_value_by_row(row, bankroll):
 
 def get_match_profit(row):
     odds, probs = get_bet_odds_probs(row)
-    if row['bet_worth'] < 0: return 0
+    if row['bet_worth'] < 5 or not bet_worth_it(probs, odds): return 0
     if row['winner'] == row['pred']:
-        if bet_worth_it(probs, odds): return (odds*row['bet_worth']) - row['bet_worth']
-        else: return 0
+        return (odds*row['bet_worth']) - row['bet_worth']
     else:
         return -row['bet_worth']
 
 
-def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000, is_neural_net=False):
+def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=400, is_neural_net=False):
     if is_neural_net:
         test_probs = my_pipeline.predict(X_test)
         preds_test = my_pipeline.decode_labels(test_probs.argmax(axis=1))
@@ -387,18 +385,26 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=2000, is_neur
         n_times = len(preds_test_df[preds_test_df['pred'] == l])
         print(f"Times when {l} was predicted: {n_times} ({round(n_times/len(preds_test_df), 2)})")
 
-    test_results_df['bet_worth'] = test_results_df.apply(lambda x: get_bet_value_by_row(x, bankroll), axis=1)
-    test_results_df['profit'] = test_results_df.apply(lambda x: get_match_profit(x), axis=1)
-    test_results_df['progress'] = [bankroll] + test_results_df['profit'].cumsum().add(bankroll).tolist()[1:]
+    test_results_df['progress'] = bankroll
+    test_results_df['current_bankroll'] = bankroll
 
-    print('\nTotal bets:', len(test_results_df[test_results_df['bet_worth'] > 0]))
+    for i, row in test_results_df.iterrows():
+        odds, probs = get_bet_odds_probs(row)
+        previous_bankroll = test_results_df.at[i-1, 'progress'] if i > 0 else bankroll
+        bet_worth = get_bet_value(odds, probs, previous_bankroll)
+        test_results_df.at[i, 'bet_worth'] = bet_worth
+        profit = get_match_profit(test_results_df.iloc[i])
+        test_results_df.at[i, 'profit'] = profit
+        test_results_df.at[i, 'progress'] = previous_bankroll + profit
+
+    print('\nTotal bets:', len(test_results_df[test_results_df['profit'] != 0]))
     print('Model profit:', test_results_df.profit.sum())
     negative_consecutive_count = test_results_df['profit'].lt(0).astype(int).groupby((test_results_df['profit'] >= 0).cumsum()).sum().max()
     print('Maximum negative sequence: ', negative_consecutive_count)
     positive_consecutive_count = test_results_df['profit'].gt(0).astype(int).groupby((test_results_df['profit'] < 0).cumsum()).sum().max()
     print('Maximum positive sequence: ', positive_consecutive_count)
     print('Maximum bet worth:', test_results_df.bet_worth.max())
-    print('Minimum bet worth:', test_results_df[test_results_df['bet_worth'] > 0].bet_worth.min())
+    print('Minimum bet worth:', test_results_df[test_results_df['profit'] != 0].bet_worth.min())
 
     return test_results_df
 
@@ -458,13 +464,13 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
         test_results_df = build_pred_df(my_pipeline, X_test_filtered, y_test_filtered, odds_test_filtered, is_neural_net=is_neural_net)
         
         if verbose > 1: display(test_results_df)
-        if verbose > 1: plot_betting_progress(test_results_df)
+        if verbose > 1 or model == 'voting_classifier': plot_betting_progress(test_results_df)
 
         test_results_df['won'] = test_results_df.apply(lambda x: won_bet(x), axis=1)
         total_won = test_results_df[test_results_df['profit'] != 0]['won'].sum()
         progress_data.append([test_results_df['profit'].sum(), total_won/len(test_results_df[test_results_df['profit'] != 0])])
 
-        if test_results_df['profit'].sum() > best_results: 
+        if model == 'voting_classifier':
             best_results = test_results_df['profit'].sum()
             best_results_df = test_results_df
             best_pipeline = my_pipeline
@@ -476,6 +482,7 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
 
     # for i, row in best_results_df.iterrows():
     #     print(f"\n{row['home_team']} x {row['away_team']}: {row['pred']}/{row['winner']} {'WON' if row['won'] else ''}")
+    #     print(f"Bankroll: {row['progress']}")
     #     print(f"Bet worth: {row['bet_worth']}")
     #     print(f"Profit: {row['profit']}")
     #     print(f"H{row['home_odds']} A{row['away_odds']} D{row['draw_odds']}")
@@ -514,7 +521,7 @@ def create_neural_network():
 
 def build_neural_network(model, X_train):
     # Add layers to the model
-    model.add(Dense(64, input_dim=X_train.shape[1], activation='relu'))
+    model.add(Dense(128, input_dim=X_train.shape[1], activation='relu'))
     model.add(Dense(32, activation='relu'))
     model.add(Dense(3, activation='softmax'))
 
