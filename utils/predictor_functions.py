@@ -16,7 +16,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from joblib import load
-from .filtered_columns import filtered_cols
+from .league_options import filtered_cols, strategy
 from IPython.display import display
 import warnings
 from keras.models import Sequential
@@ -217,7 +217,7 @@ def get_models():
             'voting': False
         },
         'knn': {
-            'estimator': KNeighborsClassifier(n_neighbors=150),
+            'estimator': KNeighborsClassifier(n_neighbors=40),
             'params': None,
             'score': None,
             'voting': True
@@ -256,7 +256,7 @@ def get_models():
             'voting': False
         },
     }
-    
+
     voting_classifier_estimators = []
     for model in models_dict.keys():
         if models_dict[model]['voting'] and not isinstance(models_dict[model]['estimator'], Sequential): voting_classifier_estimators.append((model, models_dict[model]['estimator']))
@@ -328,11 +328,13 @@ def build_pipeline(X_train, y_train, model, epochs=10, batch_size=32):
 def get_pred_odds(probs):
     return 1/probs
 
-def get_bet_value(odds, probs, bankroll):
-    # return bankroll * 0.05
-    q = 1 - probs  # Probability of losing
-    b = odds - 1  # Net odds received on the bet (including the stake)
-    return ((bankroll * (probs * b - q)) / b) * 0.25
+def get_bet_value(odds, probs, bankroll, strategy='kelly'):
+    if strategy == 'kelly': 
+        q = 1 - probs  # Probability of losing
+        b = odds - 1  # Net odds received on the bet (including the stake)
+        return ((bankroll * (probs * b - q)) / b) * 0.25
+    elif strategy == 'bankroll_pct':
+        return bankroll * 0.05
 
 def get_bet_odds_probs(bet):
     if bet['pred'] == 'H': return bet['home_odds'], bet['home_probs']
@@ -343,9 +345,9 @@ def bet_worth_it(bet_worth, odds):
     # return True
     return bet_worth >= 5 and odds > 1.7
     
-def get_bet_value_by_row(row, bankroll):
+def get_bet_value_by_row(row, bankroll, strategy='kelly'):
     odds, probs = get_bet_odds_probs(row)
-    return get_bet_value(odds, probs, bankroll)
+    return get_bet_value(odds, probs, bankroll, strategy)
 
 def get_match_profit(row):
     odds, probs = get_bet_odds_probs(row)
@@ -391,7 +393,7 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=400, is_neura
     for i, row in test_results_df.iterrows():
         odds, probs = get_bet_odds_probs(row)
         previous_bankroll = test_results_df.at[i-1, 'progress'] if i > 0 else bankroll
-        bet_worth = get_bet_value(odds, probs, previous_bankroll)
+        bet_worth = get_bet_value(odds, probs, previous_bankroll, strategy=strategy)
         test_results_df.at[i, 'bet_worth'] = bet_worth
         profit = get_match_profit(test_results_df.iloc[i])
         test_results_df.at[i, 'profit'] = profit
@@ -464,13 +466,14 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
         test_results_df = build_pred_df(my_pipeline, X_test_filtered, y_test_filtered, odds_test_filtered, is_neural_net=is_neural_net)
         
         if verbose > 1: display(test_results_df)
-        if verbose > 1 or model == 'voting_classifier': plot_betting_progress(test_results_df)
+        # if verbose > 1 or model == 'knn': plot_betting_progress(test_results_df)
 
         test_results_df['won'] = test_results_df.apply(lambda x: won_bet(x), axis=1)
         total_won = test_results_df[test_results_df['profit'] != 0]['won'].sum()
         progress_data.append([test_results_df['profit'].sum(), total_won/len(test_results_df[test_results_df['profit'] != 0])])
 
-        if model == 'voting_classifier':
+        # Define selected model for production
+        if model == 'knn':
             best_results = test_results_df['profit'].sum()
             best_results_df = test_results_df
             best_pipeline = my_pipeline

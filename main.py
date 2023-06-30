@@ -7,14 +7,14 @@ from utils.leagues_info import leagues
 import json
 import os
 
-league = 'major-league-soccer'
+league = 'serie-a'
 league_info = leagues[league]
 n_last_games = 5
 bankroll = 120
 
-cols_path = f"leagues/{league}/official/columns.json"
-with open(cols_path, 'r') as json_file:
-    cols_info = json.load(json_file)
+options_path = f"leagues/{league}/official/columns.json"
+with open(options_path, 'r') as json_file:
+    options_info = json.load(json_file)
 
 features_kmeans_list, kmeans_scaler_list, pca_features, pca_scaler, pca, pipeline = pf.load_saved_utils(league)
 
@@ -24,7 +24,7 @@ data_model, seasons_squad_ids = sf.scrape_fbref(league_info['league_fbref'], lea
 
 # Getting advanced stats
 print('Scrapping fbref advanced stats...')
-games_stats_dict = sf.scrape_advanced_stats(league_info['league_id_fbref'], league_info['season_test'], seasons_squad_ids, cols_info['selected_stats'])
+games_stats_dict = sf.scrape_advanced_stats(league_info['league_id_fbref'], league_info['season_test'], seasons_squad_ids, options_info['selected_stats'])
 
 # Merging everything
 columns = ['date', 'week', 'home_team', 'home_xg', 'home_score', 'away_score', 'away_xg', 'away_team']
@@ -84,7 +84,7 @@ test_results_df = pd.concat([preds_test_df, probs_test_df, next_games], axis=1)
 test_results_df = test_results_df.astype({'home_odds': float, 'draw_odds': float, 'away_odds': float})
 
 for _, game in test_results_df.iterrows():
-    bet_value = pf.get_bet_value_by_row(game, bankroll)
+    bet_value = pf.get_bet_value_by_row(game, bankroll, options_info['strategy'])
     odds, probs = pf.get_bet_odds_probs(game)
     bet_worth_it = pf.bet_worth_it(bet_value, odds)
     if not bet_worth_it: continue

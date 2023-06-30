@@ -1,5 +1,5 @@
 import utils.predictor_functions as pf
-from utils.filtered_columns import filtered_cols, selected_stats
+from utils.league_options import filtered_cols, selected_stats, strategy
 import warnings
 import joblib
 import os
@@ -7,16 +7,15 @@ import json
 warnings.filterwarnings('ignore')
 print("Setup Complete")
 
-save_pipeline = False
+save_pipeline = True
 run_random_search = False
-league = 'major-league-soccer'
-seasons = '2018-2024'
-season_test = 2019
+league = 'serie-a'
+seasons = '2019-2024'
+season_test = 2023
 betting_starts_after_n_games = 0
 
 # Read the data
 X_full, y, X_test_full, y_test, odds_test = pf.get_league_data(league, seasons, season_test)
-
 # Keep selected columns only
 X_train, y_train, X_test = pf.filter_datasets(X_full, y, X_test_full)
 
@@ -34,7 +33,7 @@ X_train, X_test, pca_features, pca_scaler, pca = pf.apply_pca_datasets(X_train, 
 
 my_pipeline = pf.simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n_games, verbose=1)
 
-cols_info = {'filtered_cols': filtered_cols, 'selected_stats': selected_stats}
+cols_info = {'filtered_cols': filtered_cols, 'selected_stats': selected_stats, 'strategy': strategy}
 
 # Since the last pipeline was the Voting Classifier one, let's save it
 # If you want another, change some of the code above

@@ -7,7 +7,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from .filtered_columns import selected_stats
 
 def initialize_driver():
     option = Options()
