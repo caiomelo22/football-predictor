@@ -7,9 +7,10 @@ from utils.leagues_info import leagues
 import json
 import os
 
-league = 'serie-a'
+league = 'major-league-soccer'
 league_info = leagues[league]
 n_last_games = 5
+bankroll = 120
 
 cols_path = f"leagues/{league}/official/columns.json"
 with open(cols_path, 'r') as json_file:
@@ -75,11 +76,21 @@ X, _, odds = pf.separate_dataset_info(data_df)
 X = pf.apply_kmeans(X, kmeans_scaler_list, features_kmeans_list)
 X = pf.apply_pca(X, pca_scaler, pca, pca_features)
 predictions = pipeline.predict(X)
+probabilities = pipeline.predict_proba(X)
 
-next_games['prediction'] = predictions
+probs_test_df = pd.DataFrame(probabilities, index=data_df.index, columns=['away_probs', 'draw_probs', 'home_probs'])
+preds_test_df = pd.DataFrame(predictions, index=data_df.index, columns=['pred'])
+test_results_df = pd.concat([preds_test_df, probs_test_df, next_games], axis=1)
+test_results_df = test_results_df.astype({'home_odds': float, 'draw_odds': float, 'away_odds': float})
 
-for _, game in next_games.iterrows():
+for _, game in test_results_df.iterrows():
+    bet_value = pf.get_bet_value_by_row(game, bankroll)
+    odds, probs = pf.get_bet_odds_probs(game)
+    bet_worth_it = pf.bet_worth_it(bet_value, odds)
+    if not bet_worth_it: continue
+
     print(f"\n{game['home_team']} ({game['home_odds']})")
     print(f"X ({game['draw_odds']})")
     print(f"{game['away_team']} ({game['away_odds']})")
-    print(f"Prediction: {game['prediction']}")
+    print(f"Prediction: {game['pred']} ({odds})")
+    print(f"Bet Value: {bet_value}")

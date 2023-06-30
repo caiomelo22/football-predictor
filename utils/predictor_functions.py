@@ -339,9 +339,9 @@ def get_bet_odds_probs(bet):
     if bet['pred'] == 'A': return bet['away_odds'], bet['away_probs']
     if bet['pred'] == 'D': return bet['draw_odds'], bet['draw_probs']
 
-def bet_worth_it(probs, odds):
+def bet_worth_it(bet_worth, odds):
     # return True
-    return odds > 1.7
+    return bet_worth >= 5 and odds > 1.7
     
 def get_bet_value_by_row(row, bankroll):
     odds, probs = get_bet_odds_probs(row)
@@ -349,7 +349,7 @@ def get_bet_value_by_row(row, bankroll):
 
 def get_match_profit(row):
     odds, probs = get_bet_odds_probs(row)
-    if row['bet_worth'] < 5 or not bet_worth_it(probs, odds): return 0
+    if not bet_worth_it(row['bet_worth'], odds): return 0
     if row['winner'] == row['pred']:
         return (odds*row['bet_worth']) - row['bet_worth']
     else:
