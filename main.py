@@ -1,6 +1,6 @@
 import pandas as pd
 import utils.builder_functions as bf
-import utils.predictor_functions as pf
+import utils.classification.predictor_functions as pf
 import utils.scraper_functions as sf
 from datetime import datetime as dt, timedelta
 from utils.leagues_info import leagues
@@ -10,7 +10,7 @@ import os
 league = 'serie-a'
 league_info = leagues[league]
 n_last_games = 5
-bankroll = 120
+bankroll = 474
 
 options_path = f"leagues/{league}/official/columns.json"
 with open(options_path, 'r') as json_file:

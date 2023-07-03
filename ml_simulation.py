@@ -1,5 +1,5 @@
-import utils.predictor_functions as pf
-from utils.league_options import filtered_cols, selected_stats, strategy
+import utils.classification.predictor_functions as pf
+from utils.classification.league_options import filtered_cols, selected_stats, strategy
 import warnings
 import joblib
 import os
@@ -7,10 +7,10 @@ import json
 warnings.filterwarnings('ignore')
 print("Setup Complete")
 
-save_pipeline = True
+save_pipeline = False
 run_random_search = False
-league = 'serie-a'
-seasons = '2019-2024'
+league = 'major-league-soccer'
+seasons = '2018-2024'
 season_test = 2023
 betting_starts_after_n_games = 0
 

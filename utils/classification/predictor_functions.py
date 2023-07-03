@@ -16,7 +16,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from joblib import load
-from .league_options import filtered_cols, strategy
+from . import league_options as lo
 from IPython.display import display
 import warnings
 from keras.models import Sequential
@@ -83,7 +83,7 @@ def set_numerical_categorical_cols(X):
 
 def filter_datasets(X_full, y, X_test_full):
     # Keep selected columns only
-    my_cols = filtered_cols
+    my_cols = lo.filtered_cols
     y_train = y.copy()
     X_train = X_full[my_cols]
     X_test = X_test_full[my_cols]
@@ -393,7 +393,7 @@ def build_pred_df(my_pipeline, X_test, y_test, odds_test, bankroll=400, is_neura
     for i, row in test_results_df.iterrows():
         odds, probs = get_bet_odds_probs(row)
         previous_bankroll = test_results_df.at[i-1, 'progress'] if i > 0 else bankroll
-        bet_worth = get_bet_value(odds, probs, previous_bankroll, strategy=strategy)
+        bet_worth = get_bet_value(odds, probs, previous_bankroll, strategy=lo.strategy)
         test_results_df.at[i, 'bet_worth'] = bet_worth
         profit = get_match_profit(test_results_df.iloc[i])
         test_results_df.at[i, 'profit'] = profit
