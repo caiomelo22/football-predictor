@@ -29,7 +29,6 @@ def get_league_data(league, seasons, season_test, y_column):
     X_full.drop(['winner', 'home_score', 'away_score', 'home_odds',
                 'away_odds', 'draw_odds'], axis=1, inplace=True)
 
-    print(X_test_full[['date','season','home_team','away_team', 'winner']])
     X_test_full, y_test = separate_dataset_info(X_test_full, y_column)
 
     columns = tc.filtered_cols
@@ -41,12 +40,10 @@ def get_league_data(league, seasons, season_test, y_column):
 
     return X_full, y, X_test_full, y_test
 
-def regression_model_evaluation(X_train, y_train, X_test, y_test):
+def regression_model_evaluation(X_train, y_train, X_test, y_test, pred_col):
     # Define a dictionary to store the models and their MSE scores
     models = {
-        "Linear Regression": LinearRegression(),
         "Ridge Regression": Ridge(),
-        "Lasso Regression": Lasso(),
         "Random Forest": RandomForestRegressor(random_state=0, n_estimators=500),
         "K-Nearest Neighbors": KNeighborsRegressor(n_neighbors=50)
     }
@@ -69,6 +66,7 @@ def regression_model_evaluation(X_train, y_train, X_test, y_test):
         predictions[model_name] = y_test_pred
 
     # Print the MSE scores for each model
+    print(f'\nPredictions for {pred_col}:')
     for model_name, mse_score in mse_scores.items():
         print(f"{model_name} MSE: {mse_score}")
 
@@ -77,14 +75,12 @@ def regression_model_evaluation(X_train, y_train, X_test, y_test):
 
     # Create a dataframe to show the predicted values and actual values of the best model
     df_predictions = pd.DataFrame({
-        "Actual Score": y_test,
-        "Predicted Score": predictions[best_model],
-        "Predicted Score Rounded": predictions[best_model].round(0),
+        f"Actual {pred_col}": y_test,
+        f"Pred {pred_col}": predictions[best_model],
+        f"Pred {pred_col} Rounded": predictions[best_model].round(0),
+        f"Pred {pred_col} Rounded": predictions[best_model].round(0),
     })
-
-    # Display the dataframe
-    print("\nPredicted vs Actual Values of Best Model:")
-    print(df_predictions)
+    df_predictions[f'{pred_col} Difference'] = df_predictions[f'Pred {pred_col}'] - df_predictions[f'Actual {pred_col}']
 
     # Return the dictionary of MSE scores
-    return mse_scores
+    return df_predictions, models[best_model]
