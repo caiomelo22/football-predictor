@@ -111,10 +111,10 @@ def scrape_betexplorer(season_games, league, league_country):
         print(f"{i}/{len(rows)}")
         if not r.text: continue
         tds = r.find_elements(By.XPATH, './/child::td')
-        if len(tds) < 6: continue
-        _, matchup, _, _, _, home_odds, draw_odds, away_odds, date = [t.text for t in tds]
-        
         try:
+            if len(tds) < 6: continue
+            _, matchup, _, _, _, home_odds, draw_odds, away_odds, date = [t.text for t in tds]
+        
             if not matchup: continue
             home_team, away_team = matchup.split(' - ')
         
