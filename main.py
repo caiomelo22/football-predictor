@@ -10,7 +10,7 @@ import os
 league = 'major-league-soccer'
 league_info = leagues[league]
 n_last_games = 5
-bankroll = 451
+bankroll = 914
 
 options_path = f"leagues/{league}/official/columns.json"
 with open(options_path, 'r') as json_file:
@@ -81,6 +81,10 @@ probabilities = pipeline.predict_proba(X)
 probs_test_df = pd.DataFrame(probabilities, index=data_df.index, columns=['away_probs', 'draw_probs', 'home_probs'])
 preds_test_df = pd.DataFrame(predictions, index=data_df.index, columns=['pred'])
 test_results_df = pd.concat([preds_test_df, probs_test_df, next_games], axis=1)
+
+test_results_df.dropna(subset=['home_odds'], inplace=True)
+test_results_df = test_results_df[test_results_df['home_odds'] != " "]
+
 test_results_df = test_results_df.astype({'home_odds': float, 'draw_odds': float, 'away_odds': float})
 
 today_bets = 0
@@ -95,7 +99,7 @@ for _, game in test_results_df.iterrows():
     print(f"X ({game['draw_odds']})")
     print(f"{game['away_team']} ({game['away_odds']})")
     print(f"Prediction: {game['pred']} ({odds})")
-    print(f"Bet Value: {bet_value}")
+    print(f"Bet Value: {round(bet_value, 2)}")
 
 if not today_bets:
     print("\nSorry, there are no bets for today.")
