@@ -65,8 +65,8 @@ def get_historical_stats(games, home_games, away_games, suffix=''):
     return historical_dict
 
 def get_team_previous_games(team, game_date, season, fixtures_df):
-    home_previous_games = fixtures_df.loc[(fixtures_df['home_team'] == team) & (fixtures_df['date'] < game_date)]
-    away_previous_games = fixtures_df.loc[(fixtures_df['away_team'] == team) & (fixtures_df['date'] < game_date)]
+    home_previous_games = fixtures_df.loc[(fixtures_df['home_team'] == team) & (fixtures_df['date'] < game_date)].copy()
+    away_previous_games = fixtures_df.loc[(fixtures_df['away_team'] == team) & (fixtures_df['date'] < game_date)].copy()
     
     if len(home_previous_games.index) == 0 or len(away_previous_games.index) == 0:
         return None
@@ -83,9 +83,9 @@ def get_team_previous_games(team, game_date, season, fixtures_df):
     previous_games = pd.concat([home_previous_games, away_previous_games], axis=0, ignore_index=True)
     previous_games.sort_values('date', inplace=True)
     
-    previous_season_games = previous_games.loc[previous_games['season'] == season]
-    home_previous_season_games = home_previous_games.loc[home_previous_games['season'] == season]
-    away_previous_season_games = away_previous_games.loc[away_previous_games['season'] == season]
+    previous_season_games = previous_games.loc[previous_games['season'] == season].copy()
+    home_previous_season_games = home_previous_games.loc[home_previous_games['season'] == season].copy()
+    away_previous_season_games = away_previous_games.loc[away_previous_games['season'] == season].copy()
     
     return previous_season_games, home_previous_season_games, away_previous_season_games
 
@@ -102,8 +102,8 @@ def get_team_previous_games_stats(team, season, game_date, scenario, n_last_game
     games_dict = get_historical_stats(previous_season_games, home_previous_season_games, away_previous_season_games)
     
     previous_last_games = previous_season_games.iloc[-n_last_games:,:]
-    home_last_games = previous_last_games.loc[previous_last_games['scenario'] == 'H']
-    away_last_games = previous_last_games.loc[previous_last_games['scenario'] == 'A']
+    home_last_games = previous_last_games.loc[previous_last_games['scenario'] == 'H'].copy()
+    away_last_games = previous_last_games.loc[previous_last_games['scenario'] == 'A'].copy()
     
     last_games_dict = get_historical_stats(previous_last_games, home_last_games, away_last_games, suffix='last_games')
     last_games_dict = drop_total_games_keys(last_games_dict)
