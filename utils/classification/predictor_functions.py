@@ -329,12 +329,8 @@ def get_pred_odds(probs):
     return 1/probs
 
 def get_bet_value(odds, probs, bankroll, strategy='kelly'):
-    if strategy == 'kelly': 
-        q = 1 - probs  # Probability of losing
-        b = odds - 1  # Net odds received on the bet (including the stake)
-        return ((bankroll * (probs * b - q)) / b) * 0.25
-    elif strategy == 'bankroll_pct':
-        return bankroll * 0.05
+    unit_value = get_bet_unit_value(odds, probs, strategy)
+    return unit_value*bankroll
 
 def get_bet_odds_probs(bet):
     if bet['pred'] == 'H': return bet['home_odds'], bet['home_probs']
@@ -342,9 +338,21 @@ def get_bet_odds_probs(bet):
     if bet['pred'] == 'D': return bet['draw_odds'], bet['draw_probs']
 
 def bet_worth_it(bet_worth, odds):
-    # return True
     return bet_worth >= 5 and odds > 1.7
-    
+
+def get_bet_unit_value(odds, probs, strategy):
+    if strategy == 'kelly': 
+        q = 1 - probs  # Probability of losing
+        b = odds - 1  # Net odds received on the bet (including the stake)
+        kelly_fraction = ((probs * b - q) / b) * 0.25
+        return round(min(kelly_fraction, 1.0), 4)  # Limit the bet to 100% of the bankroll
+    elif strategy == 'bankroll_pct':
+        return 0.05
+
+def get_bet_unit_value_by_row(row, strategy):
+    odds, probs = get_bet_odds_probs(row)
+    return get_bet_unit_value(odds, probs, strategy)
+
 def get_bet_value_by_row(row, bankroll, strategy='kelly'):
     odds, probs = get_bet_odds_probs(row)
     return get_bet_value(odds, probs, bankroll, strategy)
