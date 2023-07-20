@@ -7,10 +7,10 @@ from utils.leagues_info import leagues
 import json
 import os
 
-league = 'major-league-soccer'
+league = 'serie-a'
 league_info = leagues[league]
 n_last_games = 5
-bankroll = 914
+bankroll = 1478.25
 
 options_path = f"leagues/{league}/official/columns.json"
 with open(options_path, 'r') as json_file:
@@ -99,7 +99,7 @@ for _, game in test_results_df.iterrows():
     print(f"X ({game['draw_odds']})")
     print(f"{game['away_team']} ({game['away_odds']})")
     print(f"Prediction: {game['pred']} ({odds})")
-    print(f"Bet Value: {round(bet_value, 2)}")
+    print(f"Bet Value: ${round(bet_value, 2)}")
 
 if not today_bets:
     print("\nSorry, there are no bets for today.")
