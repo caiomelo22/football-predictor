@@ -92,7 +92,7 @@ for _, game in test_results_df.iterrows():
     bet_value = pf.get_bet_value_by_row(game, bankroll, options_info['strategy'])
     odds, probs = pf.get_bet_odds_probs(game)
     bet_worth_it = pf.bet_worth_it(bet_value, odds)
-    if not bet_worth_it: continue
+    if bet_value < 0: continue
     today_bets += 1
 
     print(f"\n{game['home_team']} ({game['home_odds']})")
@@ -100,6 +100,7 @@ for _, game in test_results_df.iterrows():
     print(f"{game['away_team']} ({game['away_odds']})")
     print(f"Prediction: {game['pred']} ({odds})")
     print(f"Bet Value: ${round(bet_value, 2)}")
+    print(f"{'GOOD' if bet_worth_it else 'BAD'} BET") 
 
 if not today_bets:
     print("\nSorry, there are no bets for today.")
