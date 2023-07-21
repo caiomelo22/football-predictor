@@ -69,9 +69,9 @@ def scrape_fbref(league, league_id):
             home_score, away_score = score.split('–')
 
         today = dt.now()
-        tomorrow_date = (today + timedelta(days=1)).date()
+        two_days_date = (today + timedelta(days=2)).date()
         date_converted = dt.strptime(date, "%Y-%m-%d").date()
-        if date_converted > tomorrow_date: break
+        if date_converted > two_days_date: break
         # elif date_converted >= today.date() and date_converted <= tomorrow_date:
         
         seasons_squad_ids.extend([(home_squad_id, home_team), (away_squad_id, away_team)])

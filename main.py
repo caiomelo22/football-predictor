@@ -40,8 +40,8 @@ season_games['winner'] = season_games.apply(lambda x: bf.get_winner(x['home_scor
 # Filter for today and tomorrow's games
 today = dt.now()
 today_date = today.date()
-tomorrow_date = (today + timedelta(days=1)).date()
-next_games = season_games[(season_games['date'].dt.date >= today_date) & (season_games['date'].dt.date <= tomorrow_date)].reset_index(drop=True)
+two_days_date = (today + timedelta(days=2)).date()
+next_games = season_games[(season_games['date'].dt.date >= today_date) & (season_games['date'].dt.date <= two_days_date)].reset_index(drop=True)
 
 # Getting odds for next games
 print('Scrapping BetExplorer...')
