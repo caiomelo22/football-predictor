@@ -17,7 +17,6 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from joblib import load
 from . import league_options as lo
-from IPython.display import display
 import warnings
 from keras.models import Sequential
 from keras.layers import Dense
@@ -473,7 +472,7 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
         is_neural_net = isinstance(models_dict[model]['estimator'], Sequential)
         test_results_df = build_pred_df(my_pipeline, X_test_filtered, y_test_filtered, odds_test_filtered, is_neural_net=is_neural_net)
         
-        if verbose > 1: display(test_results_df)
+        if verbose > 1: print(test_results_df)
         # if verbose > 1 or model == 'knn': plot_betting_progress(test_results_df)
 
         test_results_df['won'] = test_results_df.apply(lambda x: won_bet(x), axis=1)
@@ -488,8 +487,8 @@ def simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n
         
     cols = ['profit', 'test_score']
     profit_df = pd.DataFrame(progress_data, columns=cols, index=models_dict.keys())
-    if verbose > 0: display(profit_df)
-    if verbose > 1: display(best_results_df.describe())
+    if verbose > 0: print(profit_df)
+    if verbose > 1: print(best_results_df.describe())
 
     # for i, row in best_results_df.iterrows():
     #     print(f"\n{row['home_team']} x {row['away_team']}: {row['pred']}/{row['winner']} {'WON' if row['won'] else ''}")
