@@ -10,7 +10,7 @@ import os
 league = 'serie-a'
 league_info = leagues[league]
 n_last_games = 5
-bankroll = 1478.25
+bankroll = 1402.12 
 
 options_path = f"leagues/{league}/official/columns.json"
 with open(options_path, 'r') as json_file:

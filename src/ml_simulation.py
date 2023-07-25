@@ -9,9 +9,9 @@ print("Setup Complete")
 
 save_pipeline = False
 run_random_search = False
-league = 'major-league-soccer'
-seasons = '2018-2024'
-season_test = 2023
+league = 'serie-a'
+seasons = '2019-2024'
+season_test = 2022
 betting_starts_after_n_games = 0
 
 # Read the data
