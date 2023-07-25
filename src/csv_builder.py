@@ -1,8 +1,13 @@
 import os
 import pandas as pd
+from dotenv import load_dotenv
 import utils.builder_functions as bf
+from services import MySQLService
 import warnings
 warnings.filterwarnings('ignore')
+
+# Load environment variables from the .env file
+load_dotenv()
 
 league = 'serie-a'
 start_season = 2019
@@ -10,16 +15,19 @@ end_season = 2024
 n_last_games = 5
 
 seasons = []
+mysql_service = MySQLService()
 
 for season in range(start_season, end_season):
-    seasons.append(pd.read_csv(f"./leagues/{league}/data/{season}-{season + 1}.csv", index_col = 0).reset_index(drop=True))
+    where_clause=f"league = '{league}' AND season = {season}"
+    data = mysql_service.get_data("matches", where_clause=where_clause)
+    seasons.append(data)
     seasons[-1]['season'] = season
 
 fixtures_df = pd.concat(seasons, axis=0).reset_index(drop=True)
-fixtures_df.dropna(subset=['home_odds', 'away_odds', 'away_odds'], inplace=True)
-fixtures_df['home_score'] = fixtures_df['home_score'].astype(int)
-fixtures_df['away_score'] = fixtures_df['away_score'].astype(int)
-fixtures_df['date'] = pd.to_datetime(fixtures_df['date'])
+fixtures_df.dropna(subset=['home_odds', 'away_odds', 'draw_odds'], inplace=True)
+fixtures_df['home_odds'] = fixtures_df['home_odds'].astype(float)
+fixtures_df['away_odds'] = fixtures_df['away_odds'].astype(float)
+fixtures_df['draw_odds'] = fixtures_df['draw_odds'].astype(float)
 fixtures_df['winner'] = fixtures_df.apply(lambda x: bf.get_winner(x['home_score'], x['away_score']), axis=1)
 
 data_model = []
