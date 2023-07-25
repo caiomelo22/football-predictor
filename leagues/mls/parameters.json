@@ -1,0 +1,4 @@
+{
+    "bet_value": "(bankroll*(probs - ((1-probs)/odds)))/6",
+    "after_n_bets": 50
+}
