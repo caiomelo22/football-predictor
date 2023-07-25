@@ -1,6 +1,7 @@
 # User specific files
 **/formatted_data
 **/best_models
+test.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
