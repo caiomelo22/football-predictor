@@ -15,7 +15,7 @@ def initialize_driver():
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option('useAutomationExtension', False)
     options.add_argument("--disable-blink-features=AutomationControlled")
-    driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+    driver = webdriver.Chrome(ChromeDriverManager(version='114.0.5735.90').install(), options=options)
     # driver.maximize_window()
     return driver
 
