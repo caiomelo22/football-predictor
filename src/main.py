@@ -1,14 +1,13 @@
+import pandas as pd
+from utils import (
+    leagues,
+    builder_functions as bf,
+    classification_functions as pf,
+    scraper_functions as sf,
+)
+from datetime import datetime as dt, timedelta
 import json
 import os
-from datetime import datetime as dt
-from datetime import timedelta
-
-import pandas as pd
-
-import utils.builder_functions as bf
-import utils.classification.predictor_functions as pf
-import utils.scraper_functions as sf
-from utils.leagues_info import leagues
 
 league = "serie-a"
 league_info = leagues[league]
