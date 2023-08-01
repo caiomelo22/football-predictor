@@ -1,20 +1,27 @@
-from utils import classification_functions as pf, classification_cols, classification_stats, classification_strategy
-import warnings
-import joblib
-import os
 import json
-warnings.filterwarnings('ignore')
+import os
+import warnings
+
+import joblib
+
+from utils import classification_cols
+from utils import classification_functions as pf
+from utils import classification_stats, classification_strategy
+
+warnings.filterwarnings("ignore")
 print("Setup Complete")
 
 save_pipeline = False
 run_random_search = False
-league = 'serie-a'
-seasons = '2019-2024'
+league = "serie-a"
+seasons = "2019-2024"
 season_test = 2022
 betting_starts_after_n_games = 0
 
 # Read the data
-X_full, y, X_test_full, y_test, odds_test = pf.get_league_data(league, seasons, season_test)
+X_full, y, X_test_full, y_test, odds_test = pf.get_league_data(
+    league, seasons, season_test
+)
 # Keep selected columns only
 X_train, y_train, X_test = pf.filter_datasets(X_full, y, X_test_full)
 
@@ -22,17 +29,27 @@ X_train, y_train, X_test = pf.filter_datasets(X_full, y, X_test_full)
 first_mi_scores = pf.make_mi_scores(X_train, y_train)
 
 # Cluster features
-X_train, X_test, kmeans_scaler_list, features_kmeans_list = pf.create_cluster_features(X_train, X_test, first_mi_scores)
+X_train, X_test, kmeans_scaler_list, features_kmeans_list = pf.create_cluster_features(
+    X_train, X_test, first_mi_scores
+)
 
 # Second mi scores
 second_mi_scores = pf.make_mi_scores(X_train, y_train)
 
 # PCA features
-X_train, X_test, pca_features, pca_scaler, pca = pf.apply_pca_datasets(X_train, X_test, second_mi_scores)
+X_train, X_test, pca_features, pca_scaler, pca = pf.apply_pca_datasets(
+    X_train, X_test, second_mi_scores
+)
 
-my_pipeline = pf.simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n_games, verbose=1)
+my_pipeline = pf.simulate(
+    X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n_games, verbose=1
+)
 
-cols_info = {'filtered_cols': classification_cols, 'selected_stats': classification_stats, 'strategy': classification_strategy}
+cols_info = {
+    "filtered_cols": classification_cols,
+    "selected_stats": classification_stats,
+    "strategy": classification_strategy,
+}
 
 # Since the last pipeline was the Voting Classifier one, let's save it
 # If you want another, change some of the code above
@@ -41,7 +58,7 @@ if save_pipeline:
     if not os.path.exists(path):
         os.makedirs(path)
 
-    with open(f"{path}/columns.json", 'w') as json_file:
+    with open(f"{path}/columns.json", "w") as json_file:
         json.dump(cols_info, json_file)
 
     joblib.dump(my_pipeline, f"{path}/pipeline.joblib")
