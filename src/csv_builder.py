@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from dotenv import load_dotenv
-import utils.builder_functions as bf
+from utils import builder_functions as bf
 from services import MySQLService
 import warnings
 warnings.filterwarnings('ignore')

@@ -1,5 +1,4 @@
-import utils.regression.totals_predictor_functions as tpf
-import utils.regression.totals_columns as tc
+from utils import regression_functions as pf, regression_cols, regression_stats
 import pandas as pd
 import os
 import json
@@ -25,9 +24,9 @@ predictions = []
 models = {}
 for col in score_cols:
     # Read the data
-    X_train, y_train, X_test, y_test = tpf.get_league_data(league, seasons, season_test, col)
+    X_train, y_train, X_test, y_test = pf.get_league_data(league, seasons, season_test, col)
 
-    df_predictions, best_model = tpf.regression_model_evaluation(X_train, y_train, X_test, y_test, col)
+    df_predictions, best_model = pf.regression_model_evaluation(X_train, y_train, X_test, y_test, col)
     models[col] = best_model
     predictions.append(df_predictions)
     
@@ -66,7 +65,7 @@ def get_difference_stats(df_predictions):
 get_difference_stats(df_predictions)
 
 if save_model:
-    cols_info = {'filtered_cols': tc.filtered_cols, 'selected_stats': tc.selected_stats}
+    cols_info = {'filtered_cols': regression_cols, 'selected_stats': regression_stats}
     path = f"leagues/{league}/official/regression"
     if not os.path.exists(path):
         os.makedirs(path)

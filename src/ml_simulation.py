@@ -1,5 +1,4 @@
-import utils.classification.predictor_functions as pf
-from utils.classification.league_options import filtered_cols, selected_stats, strategy
+from utils import classification_functions as pf, classification_cols, classification_stats, classification_strategy
 import warnings
 import joblib
 import os
@@ -33,7 +32,7 @@ X_train, X_test, pca_features, pca_scaler, pca = pf.apply_pca_datasets(X_train, 
 
 my_pipeline = pf.simulate(X_train, y_train, X_test, y_test, odds_test, betting_starts_after_n_games, verbose=1)
 
-cols_info = {'filtered_cols': filtered_cols, 'selected_stats': selected_stats, 'strategy': strategy}
+cols_info = {'filtered_cols': classification_cols, 'selected_stats': classification_stats, 'strategy': classification_strategy}
 
 # Since the last pipeline was the Voting Classifier one, let's save it
 # If you want another, change some of the code above
