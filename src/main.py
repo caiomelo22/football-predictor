@@ -1,82 +1,25 @@
 import pandas as pd
-from utils import (
-    leagues,
-    builder_functions as bf,
-    classification_functions as pf,
-    scraper_functions as sf,
-)
+from helpers import classification as pf
 from datetime import datetime as dt, timedelta
 import json
 import os
 
-league = "serie-a"
-league_info = leagues[league]
+from helpers.file import load_from_file
+
+league = "major-league-soccer"
+league_fbref = "Serie-A"
+league_id_fbref = 24
+league_betexplorer = "serie-a"
+country_betexplorer = "brazil"
+seasons = "2019-2024"
+season_test = 2023
 n_last_games = 5
-bankroll = 1557.76
+bankroll = 760.85
 
-options_path = f"leagues/{league}/official/columns.json"
-with open(options_path, "r") as json_file:
-    options_info = json.load(json_file)
+path = f"leagues/{league}/official"
+options_info = load_from_file(path, 'columns')
 
-(
-    features_kmeans_list,
-    kmeans_scaler_list,
-    pca_features,
-    pca_scaler,
-    pca,
-    pipeline,
-) = pf.load_saved_utils(league)
-
-# Getting next games
-print("Scrapping fbref...")
-data_model, seasons_squad_ids = sf.scrape_fbref(
-    league_info["league_fbref"], league_info["league_id_fbref"]
-)
-
-# Getting advanced stats
-print("Scrapping fbref advanced stats...")
-games_stats_dict = sf.scrape_advanced_stats(
-    league_info["league_id_fbref"],
-    league_info["season_test"],
-    seasons_squad_ids,
-    options_info["selected_stats"],
-)
-
-# Merging everything
-columns = [
-    "date",
-    "week",
-    "home_team",
-    "home_xg",
-    "home_score",
-    "away_score",
-    "away_xg",
-    "away_team",
-]
-complete_games = [
-    sf.complete_stats(game_stats, columns, games_stats_dict)
-    for game_stats in data_model
-]
-season_games = pd.DataFrame(complete_games)
-
-season_games["season"] = league_info["season_test"]
-exclude_cols = ["date", "week", "home_team", "away_team", "season"]
-season_games = season_games.apply(
-    lambda x: pd.to_numeric(x, errors="coerce") if x.name not in exclude_cols else x
-)
-season_games["date"] = pd.to_datetime(season_games["date"])
-season_games["winner"] = season_games.apply(
-    lambda x: bf.get_winner(x["home_score"], x["away_score"]), axis=1
-)
-
-# Filter for today and tomorrow's games
-today = dt.now()
-today_date = today.date()
-two_days_date = (today + timedelta(days=2)).date()
-next_games = season_games[
-    (season_games["date"].dt.date >= today_date)
-    & (season_games["date"].dt.date <= two_days_date)
-].reset_index(drop=True)
+pipeline = pf.load_saved_utils(league)
 
 # Getting odds for next games
 print("Scrapping BetExplorer...")
@@ -125,8 +68,6 @@ next_games.to_csv(f"{path}/next_games.csv")
 
 X, _, odds = pf.separate_dataset_info(data_df)
 
-X = pf.apply_kmeans(X, kmeans_scaler_list, features_kmeans_list)
-X = pf.apply_pca(X, pca_scaler, pca, pca_features)
 predictions = pipeline.predict(X)
 probabilities = pipeline.predict_proba(X)
 
