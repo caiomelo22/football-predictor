@@ -406,8 +406,7 @@ def plot_betting_progress(test_results_df):
     plt.show()
 
 
-def load_saved_utils(league):
-    dir_path = f"leagues/{league}/official"
+def load_saved_utils(dir_path):
     pipeline = load(f"{dir_path}/pipeline.joblib")
 
     return pipeline
