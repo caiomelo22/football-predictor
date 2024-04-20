@@ -10,10 +10,10 @@ load_dotenv()
 
 class MySQLService:
     def __init__(self):
-        self.host = os.getenv("DB_HOST")
-        self.user = os.getenv("DB_USER")
-        self.password = os.getenv("DB_PASSWORD")
-        self.database = os.getenv("DB_DATABASE")
+        self.host = os.getenv("HOST")
+        self.user = os.getenv("USER")
+        self.password = os.getenv("PASSWORD")
+        self.database = os.getenv("DATABASE")
 
     def connect(self):
         try:
