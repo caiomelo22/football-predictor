@@ -27,11 +27,23 @@ class MySQLService:
             print(f"Error connecting to MySQL database: {e}")
             raise
 
-    def get_data(self, table_name, columns=None, where_clause=None):
-        try:
-            db = self.connect()
-            cursor = db.cursor()
+    def execute_query(self, query):
+        db = self.connect()
+        cursor = db.cursor()
 
+        cursor.execute(query)
+        result = cursor.fetchall()
+
+        # Convert the fetched data to a DataFrame
+        column_names = [col[0] for col in cursor.description]
+        df = pd.DataFrame(result, columns=column_names)
+
+        db.close()
+
+        return df
+
+    def get_data(self, table_name, columns=None, where_clause=None, order_by_clause=None):
+        try:
             # If columns are not specified, fetch all columns (*)
             columns_str = "*" if columns is None else ", ".join(columns)
 
@@ -40,14 +52,10 @@ class MySQLService:
             if where_clause:
                 query += f" WHERE {where_clause}"
 
-            cursor.execute(query)
-            result = cursor.fetchall()
+            if order_by_clause:
+                query += f" ORDER BY {order_by_clause}"
 
-            # Convert the fetched data to a DataFrame
-            column_names = [col[0] for col in cursor.description]
-            df = pd.DataFrame(result, columns=column_names)
-
-            db.close()
+            df = self.execute_query(query)
 
             return df
         except mysql.connector.Error as e:

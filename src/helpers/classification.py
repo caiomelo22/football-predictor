@@ -41,16 +41,14 @@ def separate_dataset_info(X):
     for c in odds_cols:
         if "odds" in c:
             odds[c] = pd.to_numeric(odds[c], errors="coerce")
-    odds.dropna(inplace=True)
 
-    X.drop(
+    X_filtered = X.drop(
         ["winner", "home_score", "away_score", "home_odds", "away_odds", "draw_odds"],
         axis=1,
-        inplace=True,
     )
 
-    _, numerical_cols, _ = set_numerical_categorical_cols(X)
-    return X[numerical_cols], y, odds
+    _, numerical_cols, _ = set_numerical_categorical_cols(X_filtered)
+    return X_filtered[numerical_cols], y, odds
 
 
 def get_league_data(league, seasons, season_test):
