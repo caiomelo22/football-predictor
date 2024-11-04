@@ -1,28 +1,78 @@
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
+from helpers import elo as eh
+
+from services.mysql.service import MySQLService
 
 
-def get_winner(home_score, away_score):
-    if home_score is None or away_score is None:
-        return None
-    elif home_score > away_score:
+def get_result(row):
+    if row["home_score"] > row["away_score"]:
         return "H"
-    elif away_score > home_score:
+    elif row["away_score"] > row["home_score"]:
         return "A"
     else:
         return "D"
 
 
+def initialize_matches(league, start_season):
+    mysql_service = MySQLService()
+
+    where_clause = f"league = '{league}'"
+    data = mysql_service.get_data("matches", where_clause=where_clause)
+
+    data["date"] = pd.to_datetime(data["date"])
+    data = data.dropna(subset=["home_score", "away_score"]).reset_index(drop=True)
+
+    data["result"] = data.apply(get_result, axis=1)
+    data["home_elo"] = 1500
+    data["away_elo"] = 1500
+
+    data["home_odds"] = data["home_odds"].astype(float)
+    data["away_odds"] = data["away_odds"].astype(float)
+    data["draw_odds"] = data["draw_odds"].astype(float)
+
+    teams_elo = initialize_elo_dict(data)
+
+    print("Generating teams ELOs...")
+
+    for index in tqdm(range(len(data))):
+        row = data.iloc[index]
+
+        data.at[index, "home_elo"] = teams_elo[row["home_team"]]
+        data.at[index, "away_elo"] = teams_elo[row["away_team"]]
+
+        teams_elo = eh.update_match_results(
+            teams_elo,
+            row["home_team"],
+            row["away_team"],
+            row["home_score"],
+            row["away_score"],
+        )
+
+    print("Successfully generated teams ELOs.")
+
+    return data[data["season"] >= start_season]
+
+
+def initialize_elo_dict(matches):
+    teams = set(
+        matches["home_team"].unique().tolist() + matches["away_team"].unique().tolist()
+    )
+    teams_elo = {team: 1500 for team in teams}
+    return teams_elo
+
+
 def get_games_results(games, scenario):
     loser = "A" if scenario == "H" else "H"
     return (
-        len(games.loc[games["winner"] == scenario]),
-        len(games.loc[games["winner"] == "D"]),
-        len(games.loc[games["winner"] == loser]),
+        len(games.loc[games["result"] == scenario]),
+        len(games.loc[games["result"] == "D"]),
+        len(games.loc[games["result"] == loser]),
     )
 
 
-def get_stats_mean(games, n_last_games, scenario):
+def get_stats_mean(games, n_last_games, prefix=""):
     games = games.iloc[-n_last_games:, :]
 
     prefixes = ["team_", "opp_"]
@@ -31,29 +81,39 @@ def get_stats_mean(games, n_last_games, scenario):
         for col in games.columns
         if any(col.startswith(prefix) for prefix in prefixes)
         and games[col].dtype in (float, "int32", "int64")
+        and "_odds" not in col
+        and "_elo" not in col
     ]
-    team_stats_dict = games[filtered_cols].mean().to_dict()
+    team_stats_dict: dict = games[filtered_cols].mean().to_dict()
+
+    if prefix:
+        team_stats_dict = {f"{prefix}_{key}": value for key, value in team_stats_dict.items()}
 
     return team_stats_dict
 
 
-def drop_total_games_keys(historical_dict):
+def drop_total_games_keys(historical_dict, suffix=""):
+    if suffix:
+        suffix = f"_{suffix}"
+
     key_to_drop = [
-        "home_wins",
-        "home_draws",
-        "home_losses",
-        "away_wins",
-        "away_draws",
-        "away_losses",
+        f"home_wins{suffix}",
+        f"home_draws{suffix}",
+        f"home_losses{suffix}",
+        f"away_wins{suffix}",
+        f"away_draws{suffix}",
+        f"away_losses{suffix}",
     ]
+
     historical_dict = {
         key: value for key, value in historical_dict.items() if key not in key_to_drop
     }
+
     return historical_dict
 
 
-def get_historical_stats(games, home_games, away_games, suffix=""):
-    total_games = len(games)
+def get_historical_stats(home_games, away_games, suffix=""):
+    total_games = len(home_games) + len(away_games)
     home_wins, home_draws, home_losses = get_games_results(home_games, "H")
     away_wins, away_draws, away_losses = get_games_results(away_games, "A")
 
@@ -147,7 +207,7 @@ def get_team_previous_games(team, game_date, season, fixtures_df):
 
 
 def get_team_previous_games_stats(
-    team, season, game_date, scenario, n_last_games, fixtures_df
+    team, season, game_date, scenario, n_last_games, n_last_games_at, fixtures_df
 ):
     response = get_team_previous_games(team, game_date, season, fixtures_df)
     if not response:
@@ -159,30 +219,29 @@ def get_team_previous_games_stats(
         away_previous_season_games,
     ) = response
 
-    total_games = len(previous_season_games.index)
+    total_games = len(previous_season_games)
     if (
-        total_games < 10
-        or (len(home_previous_season_games.index) < 5 and scenario == "H")
-        or (len(away_previous_season_games.index) < 5 and scenario == "A")
+        total_games < n_last_games
+        or (len(home_previous_season_games) < n_last_games_at and scenario == "H")
+        or (len(away_previous_season_games) < n_last_games_at and scenario == "A")
     ):
         return
 
-    games_dict = get_historical_stats(
-        previous_season_games, home_previous_season_games, away_previous_season_games
+    whole_season_dict = get_historical_stats(
+        home_previous_season_games, away_previous_season_games
     )
 
-    previous_last_games = previous_season_games.iloc[-n_last_games:, :]
-    home_last_games = previous_last_games.loc[
-        previous_last_games["scenario"] == "H"
-    ].copy()
-    away_last_games = previous_last_games.loc[
-        previous_last_games["scenario"] == "A"
-    ].copy()
+    home_last_games = home_previous_season_games.loc[
+        home_previous_season_games["scenario"] == "H"
+    ].iloc[-n_last_games_at:, :]
+    away_last_games = away_previous_season_games.loc[
+        away_previous_season_games["scenario"] == "A"
+    ].iloc[-n_last_games_at:, :]
 
     last_games_dict = get_historical_stats(
-        previous_last_games, home_last_games, away_last_games, suffix="last_games"
+        home_last_games, away_last_games, suffix="last_games"
     )
-    last_games_dict = drop_total_games_keys(last_games_dict)
+    last_games_dict = drop_total_games_keys(last_games_dict, suffix="last_games")
 
     if scenario == "H":
         prefix = "home"
@@ -192,25 +251,25 @@ def get_team_previous_games_stats(
         previous_season_games_filtered = away_previous_season_games
 
     outcome_pct_dict = {
-        f"{prefix}_win_pct": games_dict[f"{prefix}_wins"]
+        f"{prefix}_win_pct": whole_season_dict[f"{prefix}_wins"]
         / len(previous_season_games_filtered),
-        f"{prefix}_draw_pct": games_dict[f"{prefix}_draws"]
+        f"{prefix}_draw_pct": whole_season_dict[f"{prefix}_draws"]
         / len(previous_season_games_filtered),
-        f"{prefix}_loss_pct": games_dict[f"{prefix}_losses"]
+        f"{prefix}_loss_pct": whole_season_dict[f"{prefix}_losses"]
         / len(previous_season_games_filtered),
     }
-    games_dict = drop_total_games_keys(games_dict)
+    whole_season_dict = drop_total_games_keys(whole_season_dict)
 
-    team_stats_dict = get_stats_mean(previous_season_games, n_last_games, scenario)
+    team_stats_dict_filtered = get_stats_mean(previous_season_games_filtered, n_last_games_at, prefix=prefix)
 
-    if any(np.isnan(value) for value in team_stats_dict.values()):
-        return None
+    team_stats_dict = get_stats_mean(previous_season_games, n_last_games_at)
 
     return_dict = {
-        **games_dict,
+        **whole_season_dict,
         **last_games_dict,
         **outcome_pct_dict,
         **team_stats_dict,
+        **team_stats_dict_filtered
     }
     return_dict = {f"{prefix}_{key}": value for key, value in return_dict.items()}
 
