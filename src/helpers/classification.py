@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from joblib import load
 from sklearn.cluster import KMeans
 from sklearn.compose import ColumnTransformer
 from sklearn.decomposition import PCA
@@ -30,8 +29,6 @@ print("Setup Complete")
 
 
 def separate_dataset_info(X):
-    y = X.winner
-
     odds_cols = [
         "date",
         "season",
@@ -48,12 +45,12 @@ def separate_dataset_info(X):
             odds[c] = pd.to_numeric(odds[c], errors="coerce")
 
     X_filtered = X.drop(
-        ["result", "home_score", "away_score", "home_odds", "away_odds", "draw_odds"],
+        ["result", "home_score", "away_score"],
         axis=1,
     )
 
     _, numerical_cols, _ = set_numerical_categorical_cols(X_filtered)
-    return X_filtered[numerical_cols], y, odds
+    return X_filtered[numerical_cols], odds
 
 
 def get_league_data(league, seasons, season_test):
@@ -213,10 +210,6 @@ def get_bet_odds_probs(bet):
         return bet["draw_odds"], bet["draw_probs"]
 
 
-def bet_worth_it(bet_worth, odds):
-    return bet_worth >= 5 and odds > 1.7
-
-
 def get_bet_unit_value(odds, probs, strategy):
     if strategy == "kelly":
         q = 1 - probs  # Probability of losing
@@ -247,6 +240,20 @@ def get_match_profit(row):
         return (odds * row["bet_worth"]) - row["bet_worth"]
     else:
         return -row["bet_worth"]
+
+
+def bet_worth_it(prediction, odds, pred_odds, min_odds, bet_value):
+    if (
+        bet_value < 0 # Value not worth it
+        or prediction == None # No prediction
+        or pd.isna(prediction) # No prediction
+        or prediction == 'D' # Exclude draw prediction
+        or odds < min_odds
+        or odds < pred_odds
+    ):
+        return False
+
+    return True
 
 
 def build_pred_df(my_pipeline, X_test, y_test, strategy, bankroll=400):
@@ -350,12 +357,6 @@ def plot_betting_progress(test_results_df):
 
     # Display the plot
     plt.show()
-
-
-def load_saved_utils(dir_path):
-    pipeline = load(f"{dir_path}/pipeline.joblib")
-
-    return pipeline
 
 
 def won_bet(row):
@@ -538,26 +539,25 @@ def get_bet_value(row, model):
         return row[f"Proba_AwayWin_{model}"]
 
 def bet_profit_ml(row, model, min_odds):
-    if (
-        row[f"PredictedRes_{model}"] == None # No prediction
-        or pd.isna(row[f"PredictedRes_{model}"]) # No prediction
-        or row[f"PredictedRes_{model}"] == 'D' # Exclude draw prediction
-        or (row[f"PredictedRes_{model}"] == 'H' and (
-            row['home_odds'] < min_odds
-            or row['home_odds'] < row[f"Proba_HomeWin_{model}"]
-        ))
-        or (row[f"PredictedRes_{model}"] == 'D' and (
-            row['draw_odds'] < min_odds
-            or row['draw_odds'] < row[f"Proba_Draw_{model}"]
-        ))
-        or (row[f"PredictedRes_{model}"] == 'A' and (
-            row['away_odds'] < min_odds
-            or row['away_odds'] < row[f"Proba_AwayWin_{model}"]
-        ))
+    bet_value = get_bet_value(row, model)
+
+    selected_odds = row['draw_odds']
+    selected_pred_odds = row[f"Proba_Draw_{model}"]
+    if row[f"PredictedRes_{model}"] == 'H':
+        selected_odds = row['home_odds']
+        selected_pred_odds = row[f"Proba_HomeWin_{model}"]
+    elif row[f"PredictedRes_{model}"] == 'A':
+        selected_odds = row['away_odds']
+        selected_pred_odds = row[f"Proba_AwayWin_{model}"]
+
+    if not bet_worth_it(
+        row[f"PredictedRes_{model}"],
+        selected_odds,
+        selected_pred_odds,
+        min_odds,
+        bet_value,
     ):
         return 0
-    
-    bet_value = get_bet_value(row, model)
 
     if row["result"] == row[f"PredictedRes_{model}"]:
         if row[f"PredictedRes_{model}"] == 'H':

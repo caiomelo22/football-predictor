@@ -7,6 +7,12 @@ class BetExplorerService():
         self.country = country
         self.league = league
 
+    def replace_unique_team_cases(self, team):
+        if team == "New York City":
+            team = "NYFC"
+
+        return team
+
     def get_next_games(self):
         url = f"https://www.betexplorer.com/football/{self.country}/{self.league}/"
 
@@ -32,8 +38,8 @@ class BetExplorerService():
 
                 teams_str_splitted = matchup_td.text.split(' - ')
 
-                game_dict["home_team"] = teams_str_splitted[0]
-                game_dict["away_team"] = teams_str_splitted[1]
+                game_dict["home_team"] = self.replace_unique_team_cases(teams_str_splitted[0])
+                game_dict["away_team"] = self.replace_unique_team_cases(teams_str_splitted[1])
 
                 game_dict["home_odds"] = float(home_odds_td.find("button")["data-odd"])
                 game_dict["draw_odds"] = float(draw_odds_td.find("button")["data-odd"])

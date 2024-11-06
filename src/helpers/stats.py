@@ -19,7 +19,8 @@ def initialize_matches(league, start_season):
     mysql_service = MySQLService()
 
     where_clause = f"league = '{league}'"
-    data = mysql_service.get_data("matches", where_clause=where_clause)
+    order_by_clause = "date ASC"
+    data = mysql_service.get_data("matches", where_clause=where_clause, order_by_clause=order_by_clause)
 
     data["date"] = pd.to_datetime(data["date"])
     data = data.dropna(subset=["home_score", "away_score"]).reset_index(drop=True)
@@ -52,7 +53,7 @@ def initialize_matches(league, start_season):
 
     print("Successfully generated teams ELOs.")
 
-    return data[data["season"] >= start_season]
+    return data[data["season"] >= start_season], teams_elo
 
 
 def initialize_elo_dict(matches):
