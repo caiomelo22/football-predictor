@@ -28,55 +28,6 @@ warnings.filterwarnings("ignore")
 print("Setup Complete")
 
 
-def separate_dataset_info(X):
-    odds_cols = [
-        "date",
-        "season",
-        "home_team",
-        "away_team",
-        "home_odds",
-        "away_odds",
-        "draw_odds",
-    ]
-    odds = X[odds_cols]
-
-    for c in odds_cols:
-        if "odds" in c:
-            odds[c] = pd.to_numeric(odds[c], errors="coerce")
-
-    X_filtered = X.drop(
-        ["result", "home_score", "away_score"],
-        axis=1,
-    )
-
-    _, numerical_cols, _ = set_numerical_categorical_cols(X_filtered)
-    return X_filtered[numerical_cols], odds
-
-
-def get_league_data(league, seasons, season_test):
-    # Read the data
-    X_full = pd.read_csv(
-        f"./leagues/{league}/formatted_data/{seasons}.csv", index_col=0
-    )
-    X_full.replace(" ", np.nan, inplace=True)
-    X_full = X_full.dropna(subset=["home_odds", "away_odds", "draw_odds"], how="any")
-    X_test_full = X_full[X_full["season"] == season_test]
-    X_full = X_full[X_full["season"] < season_test]
-
-    # Remove rows with missing target, separate target from predictors
-    y = X_full.winner
-    X_full.drop(
-        ["result", "home_score", "away_score", "home_odds", "away_odds", "draw_odds"],
-        axis=1,
-        inplace=True,
-    )
-
-    print(X_test_full[["date", "season", "home_team", "away_team", "result"]])
-    X_test_full, y_test, odds_test = separate_dataset_info(X_test_full)
-
-    return X_full, y, X_test_full, y_test, odds_test
-
-
 def set_numerical_categorical_cols(X: pd.DataFrame):
     # "Cardinality" means the number of unique values in a column
     # Select categorical columns with relatively low cardinality
@@ -94,49 +45,6 @@ def set_numerical_categorical_cols(X: pd.DataFrame):
 
     return categorical_cols, numerical_cols, int_cols
 
-
-def filter_datasets(X_full, y, X_test_full, filtered_cols):
-    y_train = y.copy()
-    X_train = X_full[filtered_cols]
-    X_test = X_test_full[filtered_cols]
-
-    return X_train, y_train, X_test
-
-
-def plot_feature_corr_chart(X, numerical_cols):
-    plt.figure(figsize=(12, 12))
-    plot_data = X[numerical_cols].corr()
-    sns.heatmap(data=plot_data)
-    plt.show()
-
-
-def scale_dataset(df, scaler, just_transform=False):
-    cols = df.columns
-    if just_transform:
-        df = pd.DataFrame(scaler.transform(df), columns=cols)
-    else:
-        df = pd.DataFrame(scaler.fit_transform(df), columns=cols)
-    return df
-
-
-def scale_test_values(X_test, scaler, features_to_explore):
-    X_test_scaled = scale_dataset(
-        X_test.loc[:, features_to_explore], scaler, just_transform=True
-    )
-    return X_test_scaled
-
-
-def scale_train_values(X):
-    # Standardize
-    scaler = MinMaxScaler()
-    X_scaled = scale_dataset(X, scaler)
-    return X_scaled, scaler
-
-
-def scale_values(X_train, X_test, features_to_explore):
-    X_train_scaled, scaler = scale_train_values(X_train, features_to_explore)
-    X_test_scaled = scale_test_values(X_test, scaler, features_to_explore)
-    return X_train_scaled, X_test_scaled, scaler
 
 def build_pipeline(X_train, y_train, model, preprocess):
     categorical_cols, numerical_cols, int_cols = set_numerical_categorical_cols(X_train)
@@ -191,15 +99,22 @@ def build_pipeline(X_train, y_train, model, preprocess):
 
     return pipeline
 
+def get_bet_unit_value(odds, probs, bankroll, strategy, default_value=1, default_bankroll_pct=0.05):
+    if strategy == "kelly":
+        q = 1 - probs  # Probability of losing
+        b = odds - 1  # Net odds received on the bet (including the stake)
+        kelly_fraction = ((probs * b - q) / b) * 0.5
+        return round(
+            min(kelly_fraction, 1.0), 4
+        )  * bankroll # Limit the bet to 100% of the bankroll
+    elif strategy == "bankroll_pct":
+        return default_bankroll_pct * bankroll
+    else:
+        return default_value
 
-def get_pred_odds(probs):
-    return 1 / probs
-
-
-def get_bet_value(odds, probs, bankroll, strategy="kelly"):
-    unit_value = get_bet_unit_value(odds, probs, strategy)
-    return unit_value * bankroll
-
+def get_bet_value_by_row(row, bankroll, strategy="kelly"):
+    odds, probs = get_bet_odds_probs(row)
+    return get_bet_value(odds, probs, bankroll, strategy)
 
 def get_bet_odds_probs(bet):
     if bet["pred"] == "H":
@@ -210,157 +125,18 @@ def get_bet_odds_probs(bet):
         return bet["draw_odds"], bet["draw_probs"]
 
 
-def get_bet_unit_value(odds, probs, strategy):
-    if strategy == "kelly":
-        q = 1 - probs  # Probability of losing
-        b = odds - 1  # Net odds received on the bet (including the stake)
-        kelly_fraction = ((probs * b - q) / b) * 0.5
-        return round(
-            min(kelly_fraction, 1.0), 4
-        )  # Limit the bet to 100% of the bankroll
-    elif strategy == "bankroll_pct":
-        return 0.05
-
-
-def get_bet_unit_value_by_row(row, strategy):
-    odds, probs = get_bet_odds_probs(row)
-    return get_bet_unit_value(odds, probs, strategy)
-
-
-def get_bet_value_by_row(row, bankroll, strategy="kelly"):
-    odds, probs = get_bet_odds_probs(row)
-    return get_bet_value(odds, probs, bankroll, strategy)
-
-
-def get_match_profit(row):
-    odds, _ = get_bet_odds_probs(row)
-    if not bet_worth_it(row["bet_worth"], odds):
-        return 0
-    if row["result"] == row["pred"]:
-        return (odds * row["bet_worth"]) - row["bet_worth"]
-    else:
-        return -row["bet_worth"]
-
-
 def bet_worth_it(prediction, odds, pred_odds, min_odds, bet_value):
     if (
         bet_value < 0 # Value not worth it
         or prediction == None # No prediction
         or pd.isna(prediction) # No prediction
-        or prediction == 'D' # Exclude draw prediction
+        # or prediction == 'D' # Exclude draw prediction
         or odds < min_odds
         or odds < pred_odds
     ):
         return False
 
     return True
-
-
-def build_pred_df(my_pipeline, X_test, y_test, strategy, bankroll=400):
-    test_probs = my_pipeline.predict_proba(X_test)
-    preds_test = my_pipeline.predict(X_test)
-    labels = my_pipeline.classes_
-
-    print("Classification Report:")
-    report = classification_report(y_test, preds_test)
-    print(report)
-
-    print("Confusion Matrix:")
-    matrix = confusion_matrix(y_test, preds_test, labels=labels)
-    print(matrix)
-
-    probs_test_df = pd.DataFrame(
-        test_probs,
-        index=y_test.index,
-        columns=["away_probs", "draw_probs", "home_probs"],
-    )
-
-    preds_test_df = pd.DataFrame(preds_test, index=y_test.index, columns=["pred"])
-
-    test_results_df = pd.concat(
-        [y_test, preds_test_df, probs_test_df, odds_test], axis=1
-    )
-
-    print("\n")
-    for l in labels:
-        n_times = len(preds_test_df[preds_test_df["pred"] == l])
-        print(
-            f"Times when {l} was predicted: {n_times} ({round(n_times/len(preds_test_df), 2)})"
-        )
-
-    test_results_df["progress"] = bankroll
-    test_results_df["current_bankroll"] = bankroll
-
-    for i, row in test_results_df.iterrows():
-        odds, probs = get_bet_odds_probs(row)
-
-        previous_bankroll = test_results_df.at[i - 1, "progress"] if i > 0 else bankroll
-
-        bet_worth = get_bet_value(odds, probs, previous_bankroll, strategy=strategy)
-
-        test_results_df.at[i, "bet_worth"] = bet_worth
-
-        profit = get_match_profit(test_results_df.iloc[i])
-
-        test_results_df.at[i, "profit"] = profit
-        test_results_df.at[i, "progress"] = previous_bankroll + profit
-
-    print("\nTotal bets:", len(test_results_df[test_results_df["profit"] != 0]))
-    print("Model profit:", test_results_df.profit.sum())
-
-    negative_consecutive_count = (
-        test_results_df["profit"]
-        .lt(0)
-        .astype(int)
-        .groupby((test_results_df["profit"] >= 0).cumsum())
-        .sum()
-        .max()
-    )
-
-    print("Maximum negative sequence: ", negative_consecutive_count)
-
-    positive_consecutive_count = (
-        test_results_df["profit"]
-        .gt(0)
-        .astype(int)
-        .groupby((test_results_df["profit"] < 0).cumsum())
-        .sum()
-        .max()
-    )
-
-    print("Maximum positive sequence: ", positive_consecutive_count)
-    print("Maximum bet worth:", test_results_df.bet_worth.max())
-    print(
-        "Minimum bet worth:",
-        test_results_df[test_results_df["profit"] != 0].bet_worth.min(),
-    )
-
-    return test_results_df
-
-
-def plot_betting_progress(test_results_df):
-    accumulated_values = test_results_df["progress"]
-
-    # Create x-axis values
-    x = range(len(accumulated_values))
-
-    # Set the figure size
-    plt.figure(figsize=(12, 6))
-
-    # Plot the accumulated column
-    plt.plot(x, accumulated_values)
-
-    # Set labels and title
-    plt.xlabel("N Bets")
-    plt.ylabel("Profit")
-    plt.title("Profit by n bets")
-
-    # Display the plot
-    plt.show()
-
-
-def won_bet(row):
-    return 1 if row["pred"] == row["result"] else 0
 
 
 def get_models(random_state, voting_classifier_models=["logistic_regression"]) -> dict:
@@ -496,7 +272,7 @@ def simulate(
     return matches, models_dict
 
 # Function to calculate profit based on prediction
-def elo_bet_profit(row, start_season, min_odds):
+def elo_bet_profit(row, start_season, min_odds, bankroll, strategy, default_value, default_bankroll_pct):
     if row["season"] == start_season:
         return 0
     
@@ -511,36 +287,30 @@ def elo_bet_profit(row, start_season, min_odds):
     
     if bet_on == None:
         return 0
-    elif row["result"] == bet_on:
-        profit_elo = odds - 1  # Profit from winning bet
+
+    bet_value = get_bet_unit_value(odds, 1, bankroll, strategy, default_value, default_bankroll_pct)
+    
+    if row["result"] == bet_on:
+        profit_elo = (odds*bet_value) - bet_value  # Profit from winning bet
     else:
-        profit_elo = -1  # Loss from losing bet
+        profit_elo = - bet_value  # Loss from losing bet
 
     return profit_elo
 
-def home_bet_profit(row, start_season, min_odds):
+def home_bet_profit(row, start_season, min_odds, bankroll, strategy, default_value, default_bankroll_pct):
     if row["season"] == start_season:
         return 0
+
+    bet_value = get_bet_unit_value(row['home_odds'], 1, bankroll, strategy, default_value, default_bankroll_pct)
     
     if row['home_odds'] < min_odds:
         return 0
     elif row["result"] == "H":
-        return row['home_odds'] - 1  # Profit from winning bet
+        return (row['home_odds'] * bet_value) - bet_value  # Profit from winning bet
     else:
-        return -1
+        return - bet_value
 
-def get_bet_value(row, model):
-    return 1
-    if row[f"PredictedRes_{model}"] == 'H':
-        return row[f"Proba_HomeWin_{model}"]
-    elif row[f"PredictedRes_{model}"] == 'D':
-        return row[f"Proba_Draw_{model}"]
-    elif row[f"PredictedRes_{model}"] == 'A':
-        return row[f"Proba_AwayWin_{model}"]
-
-def bet_profit_ml(row, model, min_odds):
-    bet_value = get_bet_value(row, model)
-
+def bet_profit_ml(row, model, min_odds, bankroll, strategy="kelly", default_value=1, default_bankroll_pct=0.05):
     selected_odds = row['draw_odds']
     selected_pred_odds = row[f"Proba_Draw_{model}"]
     if row[f"PredictedRes_{model}"] == 'H':
@@ -549,6 +319,8 @@ def bet_profit_ml(row, model, min_odds):
     elif row[f"PredictedRes_{model}"] == 'A':
         selected_odds = row['away_odds']
         selected_pred_odds = row[f"Proba_AwayWin_{model}"]
+
+    bet_value = get_bet_unit_value(selected_odds, selected_pred_odds, bankroll, strategy, default_value, default_bankroll_pct)
 
     if not bet_worth_it(
         row[f"PredictedRes_{model}"],
@@ -571,12 +343,12 @@ def bet_profit_ml(row, model, min_odds):
 
     return profit_ml
 
-def get_simulation_results(matches, start_season, min_odds, plot_threshold, random_state):
+def get_simulation_results(matches, start_season, min_odds, plot_threshold, random_state, bankroll, strategy, default_value, default_bankroll_pct):
     # Calculate profits for each model
-    matches[f'ProfitElo'] = matches.apply(lambda row: elo_bet_profit(row, start_season, min_odds), axis=1)
+    matches[f'ProfitElo'] = matches.apply(lambda row: elo_bet_profit(row, start_season, min_odds, bankroll, strategy, default_value, default_bankroll_pct), axis=1)
     matches[f'CumulativeProfitElo'] = matches[f'ProfitElo'].cumsum()
 
-    matches['ProfitHome'] = matches.apply(lambda row: home_bet_profit(row, start_season, min_odds), axis=1)
+    matches['ProfitHome'] = matches.apply(lambda row: home_bet_profit(row, start_season, min_odds, bankroll, strategy, default_value, default_bankroll_pct), axis=1)
     matches['CumulativeProfitHome'] = matches['ProfitHome'].cumsum()
 
     # Plot cumulative profit
@@ -591,7 +363,7 @@ def get_simulation_results(matches, start_season, min_odds, plot_threshold, rand
     model_names = get_models(random_state).keys()
 
     for model_name in model_names:
-        matches[f'ProfitML_{model_name}'] = matches.apply(lambda row: bet_profit_ml(row, model_name, min_odds), axis=1)
+        matches[f'ProfitML_{model_name}'] = matches.apply(lambda row: bet_profit_ml(row, model_name, min_odds, bankroll, strategy, default_value, default_bankroll_pct), axis=1)
         matches[f'CumulativeProfitML_{model_name}'] = matches[f'ProfitML_{model_name}'].cumsum()
 
         if matches[f'CumulativeProfitML_{model_name}'].iloc[-1] > plot_threshold:
