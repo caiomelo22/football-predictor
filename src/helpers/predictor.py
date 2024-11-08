@@ -8,7 +8,6 @@ from joblib import load
 from termcolor import colored
 
 from helpers.file import load_from_file
-from helpers.options import filtered_cols, selected_stats, strategy
 
 def load_saved_predictor_utils(league):
     predictor_utils = load(f"../dist/betting/{league}.joblib")
