@@ -145,11 +145,13 @@ def get_bets(predictions_df, min_odds, bankroll, strategy, default_value, defaul
     for _, game in predictions_df.iterrows():
         bet_value = 1 # pf.get_bet_value_by_row(game, bankroll, strategy)
         odds, probs = pf.get_bet_odds_probs(game)
+
+        pred_odds = 1/probs
         
         bet_worth_it = pf.bet_worth_it(
             game["pred"],
             odds,
-            1/probs,
+            pred_odds,
             min_odds,
             bet_value
         )
@@ -162,10 +164,14 @@ def get_bets(predictions_df, min_odds, bankroll, strategy, default_value, defaul
         elif game['pred'] == "A":
             pred_str = game['away_team_translated']
 
+        bet_str = f"{game['home_team_translated']} ({round(game['home_elo'], 2)}) x ({round(game['away_elo'], 2)}) {game['away_team_translated']}: ${bet_value} on {pred_str} @ {odds}"
+
         if bet_worth_it:
-            bets.append(colored(f"{game['home_team_translated']} ({round(game['home_elo'], 2)}) x ({round(game['away_elo'], 2)}) {game['away_team_translated']}: ${bet_value} on {pred_str} @ {odds}", "green"))
+            bets.append(colored(bet_str, "green"))
+        elif abs(odds - min_odds) < 0.1:
+            bets.append(colored(bet_str, "yellow"))
         else:
-            bets.append(colored(f"{game['home_team_translated']} ({round(game['home_elo'], 2)}) x ({round(game['away_elo'], 2)}) {game['away_team_translated']}: ${bet_value} on {pred_str} @ {odds}", "red"))
+            bets.append(colored(bet_str, "red"))
 
     return bets
     
