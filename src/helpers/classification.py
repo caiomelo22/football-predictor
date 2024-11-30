@@ -100,10 +100,17 @@ def build_pipeline(X_train, y_train, model, preprocess):
     return pipeline
 
 def get_bet_unit_value(odds, probs, bankroll, strategy, default_value=1, default_bankroll_pct=0.05):
-    if strategy == "kelly":
+    if "kelly" in strategy:
         q = 1 - probs  # Probability of losing
         b = odds - 1  # Net odds received on the bet (including the stake)
-        kelly_fraction = ((probs * b - q) / b) * 0.5
+
+        if strategy == "half_kelly":
+            kelly_fraction = ((probs * b - q) / b) * 0.5
+        elif strategy == "quarter_kelly":
+            kelly_fraction = ((probs * b - q) / b) * 0.25
+        else:
+            kelly_fraction = ((probs * b - q) / b)
+
         return round(
             min(kelly_fraction, 1.0), 4
         )  * bankroll # Limit the bet to 100% of the bankroll
@@ -132,7 +139,7 @@ def bet_worth_it(prediction, odds, pred_odds, min_odds, bet_value):
         or pd.isna(prediction) # No prediction
         # or prediction == 'D' # Exclude draw prediction
         or odds < min_odds
-        or odds < pred_odds
+        # or odds < pred_odds
     ):
         return False
 
