@@ -10,6 +10,12 @@ class BetExplorerService():
     def replace_unique_team_cases(self, team):
         if team == "New York City":
             team = "NYFC"
+        if team == "Atletico-MG":
+            team = "Atlético Mineiro"
+        if team == "Athletico-PR":
+            team = "Ath Paranaense"
+        if team == "Atletico GO":
+            team = "Atl Goianiense"
 
         return team
 
@@ -35,6 +41,9 @@ class BetExplorerService():
                     continue
 
                 _, matchup_td, _, _, _, home_odds_td, draw_odds_td, away_odds_td, date_td = tds
+
+                if not home_odds_td.find("button"):
+                    continue
 
                 teams_str_splitted = matchup_td.text.split(' - ')
 
