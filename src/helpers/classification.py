@@ -121,7 +121,7 @@ def get_bet_unit_value(odds, probs, bankroll, strategy, default_value=1, default
 
 def get_bet_value_by_row(row, bankroll, strategy="kelly"):
     odds, probs = get_bet_odds_probs(row)
-    return get_bet_value(odds, probs, bankroll, strategy)
+    return get_bet_unit_value(odds, probs, bankroll, strategy)
 
 def get_bet_odds_probs(bet):
     if bet["pred"] == "H":
@@ -220,9 +220,6 @@ def simulate(
     start_season,
     season,
     features,
-    betting_starts_after_n_games,
-    strategy,
-    verbose=1,
     random_state=0,
     preprocess=True,
     voting_classifier_models=["logistic_regression"]
@@ -376,6 +373,7 @@ def get_simulation_results(matches, start_season, min_odds, plot_threshold, rand
         if matches[f'CumulativeProfitML_{model_name}'].iloc[-1] > plot_threshold:
             plt.plot(matches["date"], matches[f'CumulativeProfitML_{model_name}'], label=f'Cumulative Profit ML {model_name}')
 
+
     plt.title(f'Cumulative Profit from Betting over {min_odds}')
     plt.xlabel('Game')
     plt.ylabel('Cumulative Profit')
@@ -403,7 +401,7 @@ def get_simulation_results(matches, start_season, min_odds, plot_threshold, rand
 
         print(f"ML method with {model_name.ljust(20)} --> ({str(cum_profit_ml).rjust(7)}/{str(len_ml).rjust(3)}):", 
         round(cum_profit_ml / len_ml, 4))
-
+        
     # Evaluate best model
     best_models_predicted_matches = matches[matches[f"PredictedRes_{best_model_name}"].notna()]
     y_pred = best_models_predicted_matches[f"PredictedRes_{best_model_name}"]
