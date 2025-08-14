@@ -17,16 +17,6 @@ def load_saved_predictor_utils(league):
 def load_model_data(league):
     model_data = load_saved_predictor_utils(league)
 
-    pipeline = model_data["pipeline"]
-    best_model_name = model_data["best_model_name"]
-    features = model_data["filtered_cols"]
-    min_odds = model_data["min_odds"]
-    min_games_played = model_data["min_games_played"]
-    min_games_played_at = model_data["min_games_played_at"]
-    strategy = model_data["strategy"]
-    default_bankroll_pct = model_data["default_bankroll_pct"]
-    default_value = model_data["default_value"]
-
     return model_data
 
 def get_season_games(league, season):
