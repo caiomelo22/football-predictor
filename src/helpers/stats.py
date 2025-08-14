@@ -6,13 +6,29 @@ from helpers import elo as eh
 from services.mysql.service import MySQLService
 
 
-def get_result(row):
+def get_1x2_result(row):
     if row["home_score"] > row["away_score"]:
         return "H"
     elif row["away_score"] > row["home_score"]:
         return "A"
     else:
         return "D"
+    
+def get_ahc_result(row):
+    if row["away_score"] + row["away_ahc_odds"] > row["home_score"]:
+        return "A"
+    elif row["home_score"] + -row["home_ahc_odds"] > row["away_score"]:
+        return "H"
+    else:
+        return "P" # Bet push
+    
+def get_totals_result(row):
+    if row["home_score"] + row["away_score"] > row["totals_line"]:
+        return "O" # Bet over
+    elif row["home_score"] + row["away_score"] < row["totals_line"]:
+        return "U" # Bet under
+    else:
+        return "P"  # Bet push
 
 
 def initialize_matches(league, start_season):
@@ -20,18 +36,18 @@ def initialize_matches(league, start_season):
 
     where_clause = f"league = '{league}'"
     order_by_clause = "date ASC"
-    data = mysql_service.get_data("matches", where_clause=where_clause, order_by_clause=order_by_clause)
+    data = mysql_service.get_data("matches_v2", where_clause=where_clause, order_by_clause=order_by_clause)
 
     data["date"] = pd.to_datetime(data["date"])
     data = data.dropna(subset=["home_score", "away_score"]).reset_index(drop=True)
 
-    data["result"] = data.apply(get_result, axis=1)
+    data["result"] = data.apply(get_1x2_result, axis=1)
+    data["ahc_result"] = data.apply(get_ahc_result, axis=1)
+    data["totals_result"] = data.apply(get_totals_result, axis=1)
+
+    # Initialize ELO ratings for teams
     data["home_elo"] = 1500
     data["away_elo"] = 1500
-
-    data["home_odds"] = data["home_odds"].astype(float)
-    data["away_odds"] = data["away_odds"].astype(float)
-    data["draw_odds"] = data["draw_odds"].astype(float)
 
     teams_elo = initialize_elo_dict(data)
 
