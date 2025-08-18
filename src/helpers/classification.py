@@ -145,8 +145,7 @@ def bet_worth_it(prediction, odds, pred_odds, min_odds, bet_value):
 
     return True
 
-
-def get_models(random_state, voting_classifier_models=["logistic_regression"]) -> dict:
+def get_classification_models(random_state, voting_classifier_models=["logistic_regression"]) -> dict:
     models_dict = {
         "naive_bayes": {
             "estimator": GaussianNB(),
@@ -214,8 +213,7 @@ def get_models(random_state, voting_classifier_models=["logistic_regression"]) -
 
     return models_dict
 
-
-def simulate(
+def simulate_with_classification(
     matches,
     start_season,
     season,
@@ -239,7 +237,7 @@ def simulate(
     X_test = test_set[features]
     _ = test_set["result"]
 
-    models_dict = get_models(random_state,voting_classifier_models)
+    models_dict = get_classification_models(random_state,voting_classifier_models)
 
     if not len(X_train):
         return matches, models_dict
@@ -347,7 +345,7 @@ def bet_profit_ml(row, model, min_odds, bankroll, strategy="kelly", default_valu
 
     return profit_ml
 
-def get_simulation_results(matches, start_season, min_odds, plot_threshold, random_state, bankroll, strategy, default_value, default_bankroll_pct):
+def get_classification_simulation_results(matches, start_season, min_odds, plot_threshold, random_state, bankroll, strategy, default_value, default_bankroll_pct):
     # Calculate profits for each model
     matches[f'ProfitElo'] = matches.apply(lambda row: elo_bet_profit(row, start_season, min_odds, bankroll, strategy, default_value, default_bankroll_pct), axis=1)
     matches[f'CumulativeProfitElo'] = matches[f'ProfitElo'].cumsum()
@@ -364,7 +362,7 @@ def get_simulation_results(matches, start_season, min_odds, plot_threshold, rand
     if matches[f'CumulativeProfitHome'].iloc[-1] > plot_threshold:
         plt.plot(matches["date"], matches[f'CumulativeProfitHome'], label=f'Cumulative Profit Home')
 
-    model_names = get_models(random_state).keys()
+    model_names = get_classification_models(random_state).keys()
 
     for model_name in model_names:
         matches[f'ProfitML_{model_name}'] = matches.apply(lambda row: bet_profit_ml(row, model_name, min_odds, bankroll, strategy, default_value, default_bankroll_pct), axis=1)
