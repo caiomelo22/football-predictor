@@ -139,15 +139,6 @@ def simulate_with_regression(
     return matches, models_dict
 
 def plot_cumulative_profit(matches, selected_models, market, plot_threshold=0):
-    """
-    Plots cumulative profit for a given market.
-    
-    Parameters:
-        matches: pd.DataFrame containing profit columns.
-        selected_models: list of model names.
-        market: str, one of "1x2", "AHC", "Totals".
-        plot_threshold: minimum cumulative profit to plot a model.
-    """
     plt.figure(figsize=(12, 6))
     for model in selected_models:
         cum_col = f"CumulativeProfit{market}_{model}"
@@ -160,7 +151,7 @@ def plot_cumulative_profit(matches, selected_models, market, plot_threshold=0):
     plt.grid(True)
     plt.show()
 
-def show_model_score(matches, model):
+def get_model_scores(matches, model):
     metric_columns = [
         "home_score",
         "away_score",
@@ -169,24 +160,45 @@ def show_model_score(matches, model):
     ]
     matches_filtered = matches.dropna(subset=metric_columns)
 
-    # --- Compute regression metrics first ---
     home_true = matches_filtered["home_score"]
     away_true = matches_filtered["away_score"]
     
     home_pred = matches_filtered[f"home_score_pred_{model}"]
     away_pred = matches_filtered[f"away_score_pred_{model}"]
     
-    # Example metrics: R² score
     home_r2 = r2_score(home_true, home_pred)
     away_r2 = r2_score(away_true, away_pred)
     
-    # Or Mean Absolute Error
     home_mae = mean_absolute_error(home_true, home_pred)
     away_mae = mean_absolute_error(away_true, away_pred)
     
-    print(f"\n{model} metrics:")
-    print(f"Home score -> R²: {home_r2:.4f}, MAE: {home_mae:.4f}")
-    print(f"Away score -> R²: {away_r2:.4f}, MAE: {away_mae:.4f}")
+    return home_r2, away_r2, home_mae, away_mae
+
+def show_models_score(matches, selected_models):
+    model_scores = {}
+    
+    for model in selected_models:
+        home_r2, away_r2, home_mae, away_mae = get_model_scores(matches, model)
+        model_scores[model] = {
+            "home_r2": home_r2,
+            "away_r2": away_r2,
+            "total_r2": (home_r2 + away_r2) / 2,
+            "home_mae": home_mae,
+            "away_mae": away_mae,
+        }
+
+    # Sort models by average R²
+    sorted_models = sorted(model_scores.items(), key=lambda x: x[1]["total_r2"], reverse=True)
+
+    for model, scores in sorted_models:
+        home_r2 = scores["home_r2"]
+        away_r2 = scores["away_r2"]
+        home_mae = scores["home_mae"]
+        away_mae = scores["away_mae"]
+    
+        print(f"\n{model} metrics:")
+        print(f"Home score -> R²: {home_r2:.4f}, MAE: {home_mae:.4f}")
+        print(f"Away score -> R²: {away_r2:.4f}, MAE: {away_mae:.4f}")
 
 def profit_1x2(row, model, default_value=1, min_odds=1.01):
     # Predict winner
@@ -339,10 +351,10 @@ def get_regression_simulation_results(
     plot_threshold=0,
     default_value=1,
 ):
+    show_models_score(matches, selected_models)
+
     # Calculate and plot profits
     for model in selected_models:
-        show_model_score(matches, model)
-
         matches[f"Profit1x2_{model}"] = matches.apply(lambda row: profit_1x2(row, model, default_value, min_odds), axis=1)
         matches[f"CumulativeProfit1x2_{model}"] = matches[f"Profit1x2_{model}"].cumsum()
         
