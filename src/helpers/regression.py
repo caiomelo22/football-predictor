@@ -343,21 +343,23 @@ def profit_totals(row, model, default_value=1, min_odds=1.01):
 def get_regression_simulation_results(
     matches,
     selected_models,
-    min_odds=1.01,
     plot_threshold=0,
     default_value=1,
+    min_odds_1x2=1.01,
+    min_odds_ahc=1.01,
+    min_odds_totals=1.01,
 ):
     show_models_score(matches, selected_models)
 
     # Calculate and plot profits
     for model in selected_models:
-        matches[f"Profit1x2_{model}"] = matches.apply(lambda row: profit_1x2(row, model, default_value, min_odds), axis=1)
+        matches[f"Profit1x2_{model}"] = matches.apply(lambda row: profit_1x2(row, model, default_value, min_odds_1x2), axis=1)
         matches[f"CumulativeProfit1x2_{model}"] = matches[f"Profit1x2_{model}"].cumsum()
         
-        matches[f"ProfitAHC_{model}"] = matches.apply(lambda row: profit_ahc(row, model, default_value, min_odds), axis=1)
+        matches[f"ProfitAHC_{model}"] = matches.apply(lambda row: profit_ahc(row, model, default_value, min_odds_ahc), axis=1)
         matches[f"CumulativeProfitAHC_{model}"] = matches[f"ProfitAHC_{model}"].cumsum()
         
-        matches[f"ProfitTotals_{model}"] = matches.apply(lambda row: profit_totals(row, model, default_value, min_odds), axis=1)
+        matches[f"ProfitTotals_{model}"] = matches.apply(lambda row: profit_totals(row, model, default_value, min_odds_totals), axis=1)
         matches[f"CumulativeProfitTotals_{model}"] = matches[f"ProfitTotals_{model}"].cumsum()
 
     # Plot all markets
@@ -366,13 +368,27 @@ def get_regression_simulation_results(
 
         plot_cumulative_profit(matches, selected_models, market, plot_threshold)
 
+        # Create list of model results to sort
+        model_results = []
         for model in selected_models:
             profit_col = f"CumulativeProfit{market}_{model}"
             bet_col = f"Profit{market}_{model}"
             cum_profit = round(matches.iloc[-1][profit_col], 4)
             num_bets = len(matches[matches[bet_col] != 0])
             avg_profit = round(cum_profit / num_bets, 4) if num_bets > 0 else 0
-            print(f"{market} {model.ljust(20)} --> ({str(cum_profit).rjust(7)}/{str(num_bets).rjust(3)}): {avg_profit}")
+            model_results.append({
+                'model': model,
+                'cum_profit': cum_profit,
+                'num_bets': num_bets,
+                'avg_profit': avg_profit
+            })
+
+        # Sort by cumulative profit in descending order
+        model_results.sort(key=lambda x: x['cum_profit'], reverse=True)
+
+        # Print sorted results
+        for result in model_results:
+            print(f"{market} {result['model'].ljust(20)} --> ({str(result['cum_profit']).rjust(7)}/{str(result['num_bets']).rjust(3)}): {result['avg_profit']}")
 
     return matches
 
