@@ -229,7 +229,10 @@ def profit_ahc(row, model, default_value=1, min_odds=1.01):
     pred_home = row[f"home_score_pred_{model}"]
     pred_away = row[f"away_score_pred_{model}"]
     line = row["ahc_line"]
-    if pd.isna(pred_home) or pd.isna(pred_away) or pd.isna(line):
+
+    odds = row["home_ahc_odds"] if pred_home > pred_away else row["away_ahc_odds"]
+
+    if pd.isna(pred_home) or pd.isna(pred_away) or pd.isna(line) or pd.isna(odds) or odds < min_odds:
         return 0
     
     pred_diff = pred_home - pred_away - line
@@ -240,7 +243,6 @@ def profit_ahc(row, model, default_value=1, min_odds=1.01):
     
     # Handle different line types
     if pred_diff > 0:
-        odds = row["home_ahc_odds"]
         win = actual_diff > 0
 
         if line_decimal == 0 and actual_diff == 0:  # Whole number
@@ -260,7 +262,6 @@ def profit_ahc(row, model, default_value=1, min_odds=1.01):
             else:
                 return -default_value  # Full loss
     elif pred_diff < 0:
-        odds = row["away_ahc_odds"]
         win = actual_diff < 0
 
         if line_decimal == 0 and actual_diff == 0:  # Whole number
@@ -281,9 +282,6 @@ def profit_ahc(row, model, default_value=1, min_odds=1.01):
                 return -default_value  # Full loss
     else:
         return 0  # No bet if predicted draw on handicap
-    
-    if pd.isna(odds) or odds < min_odds:
-        return 0
         
     return odds * default_value - default_value if win else -default_value
 
@@ -291,14 +289,16 @@ def profit_totals(row, model, default_value=1, min_odds=1.01):
     pred_total = row[f"home_score_pred_{model}"] + row[f"away_score_pred_{model}"]
     actual_total = row["home_score"] + row["away_score"]
     line = row["totals_line"]
-    if pd.isna(pred_total) or pd.isna(line):
+
+    odds = row["overs_odds"] if pred_total > line else row["unders_odds"]
+
+    if pd.isna(pred_total) or pd.isna(line) or pd.isna(odds) or odds < min_odds:
         return 0
     
     # Get decimal part of line
     line_decimal = line % 1
     
     if pred_total > line:
-        odds = row["overs_odds"]
         win = actual_total > line
         if line_decimal == 0 and actual_total == line:  # Whole number
             return 0  # Push
@@ -317,7 +317,6 @@ def profit_totals(row, model, default_value=1, min_odds=1.01):
             else:
                 return -default_value  # Full loss
     elif pred_total < line:
-        odds = row["unders_odds"]
         win = actual_total < line
 
         if line_decimal == 0 and actual_total == line:  # Whole number
@@ -338,9 +337,6 @@ def profit_totals(row, model, default_value=1, min_odds=1.01):
                 return -default_value  # Full loss
     else:
         return 0  # No bet if predicted exactly on line
-        
-    if pd.isna(odds) or odds < min_odds:
-        return 0
         
     return odds * default_value - default_value if win else -default_value
 
