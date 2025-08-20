@@ -218,6 +218,7 @@ def simulate_with_classification(
     random_state=0,
     preprocess=True,
     voting_classifier_models=["logistic_regression"],
+    result_col="result",
 ):
     matches_filtered = matches[
         (matches["season"] >= start_season) & (matches["season"] <= season)
@@ -229,10 +230,10 @@ def simulate_with_classification(
 
     # Prepare features and labels
     X_train = train_set[features]
-    y_train = train_set["result"]
+    y_train = train_set[result_col]
 
     X_test = test_set[features]
-    _ = test_set["result"]
+    _ = test_set[result_col]
 
     models_dict = get_classification_models(random_state,voting_classifier_models)
 
