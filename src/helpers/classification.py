@@ -46,7 +46,7 @@ def set_numerical_categorical_cols(X: pd.DataFrame):
     return categorical_cols, numerical_cols, int_cols
 
 
-def build_pipeline(X_train, y_train, model, preprocess):
+def build_pipeline(X_train, model, preprocess):
     categorical_cols, numerical_cols, int_cols = set_numerical_categorical_cols(X_train)
 
     # Preprocessing for numerical data
@@ -93,9 +93,6 @@ def build_pipeline(X_train, y_train, model, preprocess):
     pipeline = Pipeline(
         steps=steps
     )
-
-    # Preprocessing of training data, fit model
-    pipeline.fit(X_train, y_train)
 
     return pipeline
 
@@ -220,7 +217,7 @@ def simulate_with_classification(
     features,
     random_state=0,
     preprocess=True,
-    voting_classifier_models=["logistic_regression"]
+    voting_classifier_models=["logistic_regression"],
 ):
     matches_filtered = matches[
         (matches["season"] >= start_season) & (matches["season"] <= season)
@@ -243,7 +240,10 @@ def simulate_with_classification(
         return matches, models_dict
 
     for model in models_dict.keys():
-        my_pipeline = build_pipeline(X_train, y_train, models_dict[model]["estimator"], preprocess)
+        my_pipeline = build_pipeline(X_train, models_dict[model]["estimator"], preprocess)
+        
+        my_pipeline.fit(X_train, y_train)  # Fit the model on the training set
+        
         if not len(X_test):
             continue
 

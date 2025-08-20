@@ -10,23 +10,11 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.svm import SVR
-from sklearn.multioutput import MultiOutputRegressor
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.metrics import r2_score, mean_absolute_error
 
 from helpers.classification import build_pipeline
-
-def wrap_multioutput_if_needed(estimator):
-    """Wrap estimator in MultiOutputRegressor if it doesn't support multi-output natively."""
-    X_dummy = np.random.rand(5, 2)
-    y_dummy = np.random.rand(5, 2)  # 2D target
-
-    try:
-        estimator.fit(X_dummy, y_dummy)
-        return estimator  # works natively
-    except Exception:
-        return MultiOutputRegressor(estimator)
     
 def get_regression_models(random_state: int, voting_models: list[str] | None = None) -> dict:
     base_estimators = {
@@ -70,7 +58,7 @@ def get_regression_models(random_state: int, voting_models: list[str] | None = N
     # Wrap automatically for multi-output support
     models_dict = {
         name: {
-            "estimator": wrap_multioutput_if_needed(est),
+            "estimator": est,
             "params": None,
             "score": None,
         }
@@ -88,7 +76,7 @@ def get_regression_models(random_state: int, voting_models: list[str] | None = N
         if estimators:
             voting_regressor = VotingRegressor(estimators=estimators, n_jobs=-1)
             models_dict["voting_regressor"] = {
-                "estimator": wrap_multioutput_if_needed(voting_regressor),
+                "estimator": voting_regressor,
                 "params": None,
                 "score": None,
             }
@@ -96,7 +84,7 @@ def get_regression_models(random_state: int, voting_models: list[str] | None = N
     return models_dict
 
 def simulate_with_regression(
-    matches,
+    matches: pd.DataFrame,
     start_season,
     season,
     features,
@@ -114,10 +102,14 @@ def simulate_with_regression(
     test_set = matches_filtered[matches_filtered["season"] == season]
 
     X_train = train_set[features]
-    y_train = train_set[target_cols]
-
     X_test = test_set[features]
-    y_test = test_set[target_cols]
+
+    y_train_dict = dict()
+    y_test_dict = dict()
+
+    for col in target_cols:
+        y_train_dict[col] = train_set[col].values
+        y_test_dict[col] = test_set[col].values
 
     models_dict = get_regression_models(random_state, voting_models)
 
@@ -125,16 +117,24 @@ def simulate_with_regression(
         return matches, models_dict
 
     for model in models_dict.keys():
-        my_pipeline = build_pipeline(X_train, y_train, models_dict[model]["estimator"], preprocess)
-        if not len(X_test):
-            continue
-        
-        y_pred = my_pipeline.predict(X_test)
+        for col in target_cols:
+            my_pipeline = build_pipeline(X_train, models_dict[model]["estimator"], preprocess)
 
-        models_dict[model]["score"] = my_pipeline.score(X_test, y_test)
+            y_train = y_train_dict[col]
+            y_test = y_test_dict[col]
 
-        for i, col in enumerate(target_cols):
-            matches.loc[X_test.index, f"{col}_pred_{model}"] = y_pred[:, i]
+            # Preprocessing of training data, fit model
+            my_pipeline.fit(X_train, y_train)
+
+            if not len(X_test):
+                continue
+            
+            y_pred = my_pipeline.predict(X_test)
+
+            models_dict[model][f"score_{col}"] = my_pipeline.score(X_test, y_test)
+            models_dict[model][f"pipeline_{col}"] = my_pipeline
+
+            matches.loc[X_test.index, f"{col}_pred_{model}"] = y_pred
 
     return matches, models_dict
 
