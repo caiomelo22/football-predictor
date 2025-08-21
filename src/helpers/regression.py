@@ -200,7 +200,7 @@ def show_models_score(matches, selected_models):
         print(f"Home score -> R²: {home_r2:.4f}, MAE: {home_mae:.4f}")
         print(f"Away score -> R²: {away_r2:.4f}, MAE: {away_mae:.4f}")
 
-def profit_1x2(row, model, default_value=1, min_odds=1.01):
+def profit_1x2_regression(row, model, default_value=1, min_odds=1.01):
     # Predict winner
     pred_home = row[f"home_score_pred_{model}"]
     pred_away = row[f"away_score_pred_{model}"]
@@ -225,7 +225,7 @@ def profit_1x2(row, model, default_value=1, min_odds=1.01):
     else:
         return -default_value
 
-def profit_ahc(row, model, default_value=1, min_odds=1.01):
+def profit_ahc_regression(row, model, default_value=1, min_odds=1.01):
     pred_home = row[f"home_score_pred_{model}"]
     pred_away = row[f"away_score_pred_{model}"]
     line = row["ahc_line"]
@@ -285,7 +285,7 @@ def profit_ahc(row, model, default_value=1, min_odds=1.01):
         
     return odds * default_value - default_value if win else -default_value
 
-def profit_totals(row, model, default_value=1, min_odds=1.01):
+def profit_totals_regression(row, model, default_value=1, min_odds=1.01):
     pred_total = row[f"home_score_pred_{model}"] + row[f"away_score_pred_{model}"]
     actual_total = row["home_score"] + row["away_score"]
     line = row["totals_line"]
@@ -353,13 +353,13 @@ def get_regression_simulation_results(
 
     # Calculate and plot profits
     for model in selected_models:
-        matches[f"Profit1x2_{model}"] = matches.apply(lambda row: profit_1x2(row, model, default_value, min_odds_1x2), axis=1)
+        matches[f"Profit1x2_{model}"] = matches.apply(lambda row: profit_1x2_regression(row, model, default_value, min_odds_1x2), axis=1)
         matches[f"CumulativeProfit1x2_{model}"] = matches[f"Profit1x2_{model}"].cumsum()
         
-        matches[f"ProfitAHC_{model}"] = matches.apply(lambda row: profit_ahc(row, model, default_value, min_odds_ahc), axis=1)
+        matches[f"ProfitAHC_{model}"] = matches.apply(lambda row: profit_ahc_regression(row, model, default_value, min_odds_ahc), axis=1)
         matches[f"CumulativeProfitAHC_{model}"] = matches[f"ProfitAHC_{model}"].cumsum()
         
-        matches[f"ProfitTotals_{model}"] = matches.apply(lambda row: profit_totals(row, model, default_value, min_odds_totals), axis=1)
+        matches[f"ProfitTotals_{model}"] = matches.apply(lambda row: profit_totals_regression(row, model, default_value, min_odds_totals), axis=1)
         matches[f"CumulativeProfitTotals_{model}"] = matches[f"ProfitTotals_{model}"].cumsum()
 
     # Plot all markets

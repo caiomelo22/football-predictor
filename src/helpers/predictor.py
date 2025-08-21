@@ -138,7 +138,7 @@ def get_bets(predictions_df, min_odds, bankroll, strategy, default_value, defaul
 
         pred_odds = 1/probs
         
-        bet_worth_it = pf.bet_worth_it(
+        bet_worth_it = pf.classification_bet_worth_it(
             game["pred"],
             odds,
             pred_odds,
