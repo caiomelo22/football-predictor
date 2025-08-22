@@ -225,120 +225,75 @@ def profit_1x2_regression(row, model, default_value=1, min_odds=1.01):
     else:
         return -default_value
 
+def _settle_from_adjusted(adjusted, stake, odds, eps=1e-9):
+    """Return profit given the adjusted margin for the selected side."""
+    pnl_full = stake * (odds - 1)
+    if adjusted > 0.5 + eps:            # Full win
+        return pnl_full
+    elif adjusted > 0 + eps:            # Half win
+        return pnl_full / 2
+    elif abs(adjusted) <= eps:          # Push
+        return 0.0
+    elif adjusted >= -0.5 - eps:        # Half loss
+        return -stake / 2
+    else:                               # Full loss
+        return -stake
+
+
 def profit_ahc_regression(row, model, default_value=1, min_odds=1.01):
-    pred_home = row[f"home_score_pred_{model}"]
-    pred_away = row[f"away_score_pred_{model}"]
-    line = row["ahc_line"]
+    pred_home = row.get(f"home_score_pred_{model}")
+    pred_away = row.get(f"away_score_pred_{model}")
+    line = row.get("ahc_line")
 
-    odds = row["home_ahc_odds"] if pred_home > pred_away else row["away_ahc_odds"]
+    if pd.isna(pred_home) or pd.isna(pred_away) or pd.isna(line):
+        return 0.0
 
-    if pd.isna(pred_home) or pd.isna(pred_away) or pd.isna(line) or pd.isna(odds) or odds < min_odds:
-        return 0
-    
-    pred_diff = pred_home - pred_away - line
-    actual_diff = row["home_score"] - row["away_score"] - line
-    
-    # Get decimal part of line
-    line_decimal = abs(line) % 1
-    
-    # Handle different line types
-    if pred_diff > 0:
-        win = actual_diff > 0
+    # Decide the side by comparing prediction to the handicap line (away-referenced)
+    pred_margin_vs_line = (pred_home - pred_away) - line
+    eps = 1e-9
+    if abs(pred_margin_vs_line) <= eps:
+        return 0.0  # No bet if predicted exactly on the line
 
-        if line_decimal == 0 and actual_diff == 0:  # Whole number
-            return 0  # Push
-        elif line_decimal == 0.25:  # Quarter line
-            if actual_diff > 0:
-                return odds * default_value - default_value  # Full win
-            elif actual_diff == 0:
-                return (odds * default_value - default_value) / 2  # Half win
-            else:
-                return -default_value  # Full loss
-        elif line_decimal == 0.75:  # Three-quarter line
-            if actual_diff > 0:
-                return odds * default_value - default_value  # Full win
-            elif actual_diff == 0:
-                return -default_value / 2  # Half loss
-            else:
-                return -default_value  # Full loss
-    elif pred_diff < 0:
-        win = actual_diff < 0
+    bet_on_home = pred_margin_vs_line > 0
+    odds = row["home_ahc_odds"] if bet_on_home else row["away_ahc_odds"]
+    if pd.isna(odds) or odds < min_odds:
+        return 0.0
 
-        if line_decimal == 0 and actual_diff == 0:  # Whole number
-            return 0  # Push
-        elif line_decimal == 0.25:  # Quarter line
-            if actual_diff < 0:
-                return odds * default_value - default_value  # Full win
-            elif actual_diff == 0:
-                return (odds * default_value - default_value) / 2  # Half win
-            else:
-                return -default_value  # Full loss
-        elif line_decimal == 0.75:  # Three-quarter line
-            if actual_diff < 0:
-                return odds * default_value - default_value  # Full win
-            elif actual_diff == 0:
-                return -default_value / 2  # Half loss
-            else:
-                return -default_value  # Full loss
-    else:
-        return 0  # No bet if predicted draw on handicap
-        
-    return odds * default_value - default_value if win else -default_value
+    # Actual margin
+    actual_diff = row["home_score"] - row["away_score"]
+
+    # Adjusted margin from the perspective of the selected side (line is AWAY-referenced)
+    s = 1 if bet_on_home else -1
+    adjusted = s * actual_diff - s * line
+
+    return _settle_from_adjusted(adjusted, default_value, odds, eps=eps)
+
 
 def profit_totals_regression(row, model, default_value=1, min_odds=1.01):
-    pred_total = row[f"home_score_pred_{model}"] + row[f"away_score_pred_{model}"]
+    pred_home = row.get(f"home_score_pred_{model}")
+    pred_away = row.get(f"away_score_pred_{model}")
+    line = row.get("totals_line")
+
+    if pd.isna(pred_home) or pd.isna(pred_away) or pd.isna(line):
+        return 0.0
+
+    pred_total = pred_home + pred_away
+    pred_margin = pred_total - line
+    eps = 1e-9
+    if abs(pred_margin) <= eps:
+        return 0.0  # No bet if predicted exactly on the line
+
+    bet_over = pred_margin > 0
+    odds = row["overs_odds"] if bet_over else row["unders_odds"]
+    if pd.isna(odds) or odds < min_odds:
+        return 0.0
+
     actual_total = row["home_score"] + row["away_score"]
-    line = row["totals_line"]
 
-    odds = row["overs_odds"] if pred_total > line else row["unders_odds"]
+    # Adjusted margin from the selected side’s perspective
+    adjusted = (actual_total - line) if bet_over else (line - actual_total)
 
-    if pd.isna(pred_total) or pd.isna(line) or pd.isna(odds) or odds < min_odds:
-        return 0
-    
-    # Get decimal part of line
-    line_decimal = line % 1
-    
-    if pred_total > line:
-        win = actual_total > line
-        if line_decimal == 0 and actual_total == line:  # Whole number
-            return 0  # Push
-        elif line_decimal == 0.25:  # Quarter line
-            if actual_total > line:
-                return odds * default_value - default_value  # Full win
-            elif actual_total == int(line):
-                return -default_value / 2  # Half loss
-            else:
-                return -default_value  # Full loss
-        elif line_decimal == 0.75:  # Three-quarter line
-            if actual_total > line:
-                return odds * default_value - default_value  # Full win
-            elif actual_total == int(line) + 1:
-                return (odds * default_value - default_value) / 2  # Half win
-            else:
-                return -default_value  # Full loss
-    elif pred_total < line:
-        win = actual_total < line
-
-        if line_decimal == 0 and actual_total == line:  # Whole number
-            return 0  # Push
-        elif line_decimal == 0.25:  # Quarter line
-            if actual_total < line:
-                return odds * default_value - default_value  # Full win
-            elif actual_total == int(line):
-                return (odds * default_value - default_value) / 2  # Half win
-            else:
-                return -default_value  # Full loss
-        elif line_decimal == 0.75:  # Three-quarter line
-            if actual_total < line:
-                return odds * default_value - default_value  # Full win
-            elif actual_total == int(line) + 1:
-                return -default_value / 2  # Half loss
-            else:
-                return -default_value  # Full loss
-    else:
-        return 0  # No bet if predicted exactly on line
-        
-    return odds * default_value - default_value if win else -default_value
+    return _settle_from_adjusted(adjusted, default_value, odds, eps=eps)
 
 def get_regression_simulation_results(
     matches,

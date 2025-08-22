@@ -233,7 +233,7 @@ def simulate_with_classification(
     y_train = train_set[result_col]
 
     X_test = test_set[features]
-    _ = test_set[result_col]
+    y_test = test_set[result_col]
 
     # Convert y_train e y_test into Categorical before fitting the model
     y_train = pd.Series(y_train, dtype=pd.CategoricalDtype(categories=class_order, ordered=True))
@@ -241,8 +241,10 @@ def simulate_with_classification(
 
     models_dict = get_classification_models(random_state,voting_classifier_models)
 
+    new_matches_df = pd.DataFrame(index=X_test.index)
+
     if not len(X_train):
-        return matches, models_dict
+        return new_matches_df, models_dict
 
     for model in models_dict.keys():
         my_pipeline = build_pipeline(X_train, models_dict[model]["estimator"], preprocess)
@@ -256,17 +258,17 @@ def simulate_with_classification(
         y_pred = my_pipeline.predict(X_test)
         y_pred_proba = my_pipeline.predict_proba(X_test)  # Get all probabilities
 
-        matches.loc[X_test.index, f"pred_{result_col}_{model}"] = y_pred
+        new_matches_df.loc[X_test.index, f"pred_{result_col}_{model}"] = y_pred
 
         for class_str in class_order:
-            y_pred_index = np.where(class_order == class_str)[0][0]
+            y_pred_index = class_order.index(class_str)
 
             # Save the predicted probabilities for each class
-            matches.loc[X_test.index, f"proba_{result_col}_{class_str}_{model}"] = y_pred_proba[:, y_pred_index]
+            new_matches_df.loc[X_test.index, f"proba_{result_col}_{class_str}_{model}"] = y_pred_proba[:, y_pred_index]
 
         models_dict[model]["pipeline"] = my_pipeline
 
-    return matches, models_dict
+    return new_matches_df, models_dict
 
 # Function to calculate profit based on prediction
 def elo_bet_profit(row, start_season, min_odds, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix="odds", result_col="result"):
@@ -333,11 +335,55 @@ def get_betting_line(pred, result_col="result"):
         
     return None
 
+def get_adjusted_profit(adjusted, bet_value, selected_odds):
+    if adjusted > 0.5:  # Full win
+        return bet_value * (selected_odds - 1)
+    elif 0 < adjusted <= 0.5:  # Half win
+        return (bet_value * (selected_odds - 1)) / 2
+    elif adjusted == 0:  # Push (stake refunded)
+        return 0
+    elif -0.5 <= adjusted < 0:  # Half loss
+        return -bet_value / 2
+    else:  # Full loss
+        return -bet_value
+
+def get_ahc_profit(row, pred, bet_value, selected_odds):
+    # Handicap line always refers to the Away team
+    line = row["ahc_line"]
+    actual_diff = row["home_score"] - row["away_score"]
+
+    # If bet is on Away, use the line as it is
+    if pred == "A":
+        adjusted = -actual_diff + line
+    else:  # If bet is on Home, invert the line perspective
+        adjusted = actual_diff - line
+
+    # Now evaluate outcome
+    return get_adjusted_profit(adjusted, bet_value, selected_odds)
+
+
+def get_totals_profit(row, pred, bet_value, selected_odds):
+    line = row["totals_line"]
+    actual_total = row["home_score"] + row["away_score"]
+
+    # If Over, adjust perspective
+    if pred == "O":
+        adjusted = actual_total - line
+    else:  # Under
+        adjusted = line - actual_total
+
+    # Now evaluate outcome
+    return get_adjusted_profit(adjusted, bet_value, selected_odds)
+
 def get_profit_classification(row, model, min_odds, bankroll, strategy="kelly", default_value=1, default_bankroll_pct=0.05, odds_col_suffix="odds", result_col="result"):
     if "P" in [row[result_col], row[f"pred_{result_col}_{model}"]]:
         return 0    
     
     pred = row[f"pred_{result_col}_{model}"]
+
+    if pred == None or pd.isna(pred):
+        return 0
+
     pred_text = get_pred_text(pred)
     
     selected_odds = row[f'{pred_text}_{odds_col_suffix}']
@@ -362,121 +408,37 @@ def get_profit_classification(row, model, min_odds, bankroll, strategy="kelly", 
 
     # Handle AHC market
     if result_col == "ahc_result":
-        line = row["ahc_line"]
-        actual_diff = row["home_score"] - row["away_score"] - line
-        line_decimal = abs(line) % 1
-
-        if pred == "H":  # Predicted Home
-            if line_decimal == 0:  # Whole number
-                if actual_diff == 0:
-                    return 0  # Push
-                elif actual_diff > 0:
-                    return bet_value * selected_odds - bet_value
-                return -bet_value
-            elif line_decimal == 0.25:  # Quarter line
-                if actual_diff > 0:
-                    return bet_value * selected_odds - bet_value  # Full win
-                elif actual_diff == 0:
-                    return (bet_value * selected_odds - bet_value) / 2  # Half win
-                return -bet_value
-            elif line_decimal == 0.75:  # Three-quarter line
-                if actual_diff > 0:
-                    return bet_value * selected_odds - bet_value  # Full win
-                elif actual_diff == 0:
-                    return -bet_value / 2  # Half loss
-                return -bet_value
-
-        elif pred == "A":  # Predicted Away
-            if line_decimal == 0:  # Whole number
-                if actual_diff == 0:
-                    return 0  # Push
-                elif actual_diff < 0:
-                    return bet_value * selected_odds - bet_value
-                return -bet_value
-            elif line_decimal == 0.25:  # Quarter line
-                if actual_diff < 0:
-                    return bet_value * selected_odds - bet_value  # Full win
-                elif actual_diff == 0:
-                    return (bet_value * selected_odds - bet_value) / 2  # Half win
-                return -bet_value
-            elif line_decimal == 0.75:  # Three-quarter line
-                if actual_diff < 0:
-                    return bet_value * selected_odds - bet_value  # Full win
-                elif actual_diff == 0:
-                    return -bet_value / 2  # Half loss
-                return -bet_value
-
+        return get_ahc_profit(row, pred, bet_value, selected_odds)
+    
     # Handle Totals market
     if result_col == "totals_result":
-        line = row["totals_line"]
-        actual_total = row["home_score"] + row["away_score"]
-        line_decimal = line % 1
-
-        if pred == "O":  # Predicted Over
-            if line_decimal == 0:  # Whole number
-                if actual_total == line:
-                    return 0  # Push
-                elif actual_total > line:
-                    return bet_value * selected_odds - bet_value
-                return -bet_value
-            elif line_decimal == 0.25:  # Quarter line
-                if actual_total > line:
-                    return bet_value * selected_odds - bet_value  # Full win
-                elif actual_total == int(line):
-                    return -bet_value / 2  # Half loss
-                return -bet_value
-            elif line_decimal == 0.75:  # Three-quarter line
-                if actual_total > line:
-                    return bet_value * selected_odds - bet_value  # Full win
-                elif actual_total == int(line) + 1:
-                    return (bet_value * selected_odds - bet_value) / 2  # Half win
-                return -bet_value
-
-        elif pred == "U":  # Predicted Under
-            if line_decimal == 0:  # Whole number
-                if actual_total == line:
-                    return 0  # Push
-                elif actual_total < line:
-                    return bet_value * selected_odds - bet_value
-                return -bet_value
-            elif line_decimal == 0.25:  # Quarter line
-                if actual_total < line:
-                    return bet_value * selected_odds - bet_value  # Full win
-                elif actual_total == int(line):
-                    return (bet_value * selected_odds - bet_value) / 2  # Half win
-                return -bet_value
-            elif line_decimal == 0.75:  # Three-quarter line
-                if actual_total < line:
-                    return bet_value * selected_odds - bet_value  # Full win
-                elif actual_total == int(line) + 1:
-                    return -bet_value / 2  # Half loss
-                return -bet_value
+        return get_totals_profit(row, pred, bet_value, selected_odds)
 
     return 0  # Default return if no conditions met
 
 def calculate_baseline_classification_results(matches, start_season, min_odds, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix="odds", result_col="result"):
     # Calculate profits for each model
     matches[f'profit_elo_{result_col}'] = matches.apply(lambda row: elo_bet_profit(row, start_season, min_odds, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix, result_col), axis=1)
-    matches[f'cum_profit_elo_{result_col}'] = matches[f'profit_elo'].cumsum()
+    matches[f'cum_profit_elo_{result_col}'] = matches[f'profit_elo_{result_col}'].cumsum()
 
     matches[f'profit_home_{result_col}'] = matches.apply(lambda row: home_bet_profit(row, start_season, min_odds, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix, result_col), axis=1)
-    matches[f'cum_profit_home_{result_col}'] = matches['profit_home'].cumsum()
+    matches[f'cum_profit_home_{result_col}'] = matches[f'profit_home_{result_col}'].cumsum()
 
     # Plot cumulative profit
     plt.figure(figsize=(12, 8))
 
-    if matches[f'cum_profit_elo'].iloc[-1] > plot_threshold:
+    if matches[f'cum_profit_elo_{result_col}'].iloc[-1] > plot_threshold:
         plt.plot(matches["date"], matches[f'cum_profit_elo_{result_col}'], label=f'Cumulative Profit Elo {result_col.capitalize()}')
 
-    if matches[f'cum_profit_home'].iloc[-1] > plot_threshold:
+    if matches[f'cum_profit_home_{result_col}'].iloc[-1] > plot_threshold:
         plt.plot(matches["date"], matches[f'cum_profit_home_{result_col}'], label=f'Cumulative Profit Home {result_col.capitalize()}')
 
 def display_baseline_classification_results(matches, result_col="result"):
     result_col_capitalized = result_col.capitalize()
 
     def display_baseline_result(matches, result_col, method):
-        cum_profit = round(matches.iloc[-1][f'cum_profit_{result_col}_{method}'], 4)
-        len_method = len(matches[matches[f'profit_{result_col}_{method}'] != 0])
+        cum_profit = round(matches.iloc[-1][f'cum_profit_{method}_{result_col}'], 4)
+        len_method = len(matches[matches[f'profit_{method}_{result_col}'] != 0])
         avg_profit = round(cum_profit / len_method, 4) if len_method > 0 else 0
 
         print(f"{result_col_capitalized} {method.capitalize()} method ({cum_profit}/{len_method}):", avg_profit)
@@ -548,14 +510,14 @@ def display_market_classification_results(matches, start_season, min_odds, plot_
 
     return best_model_name
 
-def get_classification_simulation_results(matches, start_season, min_odds, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct):
+def get_classification_simulation_results(matches, start_season, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, min_odds_1x2=2.2, min_odds_ahc=1.9, min_odds_totals=1.7):
     # Display 1x2 classification results
     print("-"* 50)
     print("1x2 Classification Results")
     best_1x2_model = display_market_classification_results(
         matches,
         start_season,
-        min_odds,
+        min_odds_1x2,
         plot_threshold,
         bankroll,
         strategy,
@@ -573,7 +535,7 @@ def get_classification_simulation_results(matches, start_season, min_odds, plot_
     best_ahc_model = display_market_classification_results(
         matches,
         start_season,
-        min_odds,
+        min_odds_ahc,
         plot_threshold,
         bankroll,
         strategy,
@@ -591,7 +553,7 @@ def get_classification_simulation_results(matches, start_season, min_odds, plot_
     best_totals_model = display_market_classification_results(
         matches,
         start_season,
-        min_odds,
+        min_odds_totals,
         plot_threshold,
         bankroll,
         strategy,
@@ -604,3 +566,26 @@ def get_classification_simulation_results(matches, start_season, min_odds, plot_
     )
 
     return best_1x2_model, best_ahc_model, best_totals_model
+
+def display_random_forest_feature_importances(last_season_models, features):
+    for market, models_dict in last_season_models.items():        
+        print(f"Feature Importances for {market.capitalize()}:")
+
+        pipeline = models_dict["random_forest_default"]["pipeline"]
+        
+        # Get the Random Forest model from the matches DataFrame
+        importances = pipeline.named_steps['model'].feature_importances_
+
+        # Create a DataFrame for feature importances
+        feature_importances = pd.DataFrame({
+            'feature': features,
+            'importance': importances
+        }).sort_values(by='importance', ascending=False)
+
+        # Plot feature importances
+        plt.figure(figsize=(12, 8))
+        sns.barplot(x='importance', y='feature', data=feature_importances)
+        plt.title(f'Feature Importances for {market.capitalize()}')
+        plt.xlabel('Importance')
+        plt.ylabel('Feature')
+        plt.show()
