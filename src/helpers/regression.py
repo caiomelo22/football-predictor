@@ -151,7 +151,7 @@ def plot_cumulative_profit(matches, selected_models, market, plot_threshold=0):
     plt.grid(True)
     plt.show()
 
-def get_model_scores(matches, model):
+def get_regression_model_scores(matches, model):
     metric_columns = [
         "home_score",
         "away_score",
@@ -174,11 +174,11 @@ def get_model_scores(matches, model):
     
     return home_r2, away_r2, home_mae, away_mae
 
-def show_models_score(matches, selected_models):
+def show_regression_models_score(matches, selected_models):
     model_scores = {}
     
     for model in selected_models:
-        home_r2, away_r2, home_mae, away_mae = get_model_scores(matches, model)
+        home_r2, away_r2, home_mae, away_mae = get_regression_model_scores(matches, model)
         model_scores[model] = {
             "home_r2": home_r2,
             "away_r2": away_r2,
@@ -304,7 +304,7 @@ def get_regression_simulation_results(
     min_odds_ahc=1.01,
     min_odds_totals=1.01,
 ):
-    show_models_score(matches, selected_models)
+    show_regression_models_score(matches, selected_models)
 
     # Calculate and plot profits
     for model in selected_models:
