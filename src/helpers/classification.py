@@ -447,6 +447,7 @@ def show_classification_accuracies(matches, selected_models, result_col="result"
     scores = {}
     for model in selected_models:
         acc = get_classification_accuracy(matches, model, result_col)
+        selected_models[model]["score"] = acc
         scores[model] = acc
 
     for model, acc in sorted(scores.items(), key=lambda x: x[1], reverse=True):
