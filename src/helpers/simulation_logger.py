@@ -58,34 +58,28 @@ class SimulationLogger:
         finally:
             sys.stdout = old_stdout
     
-    def save_chart(self, chart_name, description="", figure_num=None):
-        """Save current matplotlib figure(s)"""
-        import matplotlib.pyplot as plt
+    def save_chart(self, chart_name, description="", figure=None):
+        """Save a specific matplotlib figure"""
         
-        if figure_num is not None:
-            # Save specific figure
-            fig = plt.figure(figure_num)
-            chart_path = os.path.join(self.simulation_dir, f"{chart_name}_fig{figure_num}.png")
-            fig.savefig(chart_path, dpi=300, bbox_inches='tight')
-        else:
-            # Save all open figures
-            for i in plt.get_fignums():
-                fig = plt.figure(i)
-                chart_path = os.path.join(self.simulation_dir, f"{chart_name}_fig{i}.png")
-                fig.savefig(chart_path, dpi=300, bbox_inches='tight')
-                
-                self.charts.append({
-                    "name": f"{chart_name}_fig{i}",
-                    "description": f"{description} - Figure {i}",
-                    "path": chart_path,
-                    "timestamp": datetime.now().isoformat()
-                })
+        if figure is None:
+            # Get the current figure
+            figure = plt.gcf()
         
-        print(f"📊 Chart(s) saved: {chart_name}")
+        chart_path = os.path.join(self.simulation_dir, f"{chart_name}.png")
+        figure.savefig(chart_path, dpi=300, bbox_inches='tight')
+        
+        self.charts.append({
+            "name": chart_name,
+            "description": description,
+            "path": chart_path,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        print(f"Chart saved: {chart_name}.png")
+        return chart_path
     
-    def save_all_charts(self, base_name, description=""):
+    def save_all_open_charts(self, base_name, description=""):
         """Save all currently open matplotlib figures"""
-        import matplotlib.pyplot as plt
         
         chart_count = 0
         for i in plt.get_fignums():
@@ -101,7 +95,11 @@ class SimulationLogger:
             })
             chart_count += 1
         
-        print(f"📊 Saved {chart_count} charts: {base_name}_*.png")
+        if chart_count == 0:
+            print(f"No charts found to save for {base_name}")
+        else:
+            print(f"Saved {chart_count} charts: {base_name}_*.png")
+        
         return chart_count
     
     def save_dataframe(self, df, filename, description=""):

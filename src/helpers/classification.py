@@ -632,7 +632,7 @@ def display_baseline_classification_results(matches, result_col="result"):
     # Display cumulative profit for Home method
     display_baseline_result(matches, result_col, "home")
 
-def display_market_classification_results(matches, start_season, min_odds, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix="odds", result_col = "result", class_order=["H", "D", "A"], include_baseline=True):
+def display_market_classification_results(matches, start_season, min_odds, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix="odds", result_col = "result", class_order=["H", "D", "A"], include_baseline=True, logger=None):
     result_col_capitalized = result_col.capitalize()
 
     # Get baseline classification results
@@ -653,6 +653,11 @@ def display_market_classification_results(matches, start_season, min_odds, plot_
     plt.ylabel(f'Cumulative {result_col_capitalized} Profit')
     plt.legend()
     plt.grid(True)
+
+    # Save chart if logger is provided
+    if logger:
+        logger.save_chart(f"profit_analysis_{result_col}", f"Profit Analysis for {result_col.capitalize()}")
+    
     plt.show()
 
     if include_baseline:
@@ -689,11 +694,16 @@ def display_market_classification_results(matches, start_season, min_odds, plot_
     plt.title(f"Confusion Matrix for {result_col_capitalized} - {best_model_name}")
     plt.xlabel('Predicted')
     plt.ylabel('True')
+    
+    # Save chart if logger is provided
+    if logger:
+        logger.save_chart(f"confusion_matrix_{result_col}", f"Confusion Matrix for {result_col.capitalize()}")
+
     plt.show()
 
     return best_model_name
 
-def get_classification_simulation_results(matches, start_season, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, min_odds_1x2=2.2, min_odds_ahc=1.9, min_odds_totals=1.7):
+def get_classification_simulation_results(matches, start_season, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, min_odds_1x2=2.2, min_odds_ahc=1.9, min_odds_totals=1.7, logger=None):
     # Display 1x2 classification results
     print("-"* 50)
     print("1x2 Classification Results")
@@ -710,6 +720,7 @@ def get_classification_simulation_results(matches, start_season, plot_threshold,
         result_col="result",
         class_order=["H", "A", "D"],
         include_baseline=True,
+        logger=logger
     )
 
     # Display AHC classification results
@@ -728,6 +739,7 @@ def get_classification_simulation_results(matches, start_season, plot_threshold,
         result_col="ahc_result",
         class_order=["H", "A", "P"],
         include_baseline=True,
+        logger=logger
     )
 
     # Display Totals classification results
@@ -746,11 +758,12 @@ def get_classification_simulation_results(matches, start_season, plot_threshold,
         result_col="totals_result",
         class_order=["O", "U", "P"],
         include_baseline=False,
+        logger=logger
     )
 
     return best_1x2_model, best_ahc_model, best_totals_model
 
-def display_random_forest_feature_importances(last_season_models, features):
+def display_random_forest_feature_importances(last_season_models, features, logger=None):
     for market, models_dict in last_season_models.items():        
         print(f"Feature Importances for {market.capitalize()}:")
 
@@ -771,4 +784,9 @@ def display_random_forest_feature_importances(last_season_models, features):
         plt.title(f'Feature Importances for {market.capitalize()}')
         plt.xlabel('Importance')
         plt.ylabel('Feature')
+
+        # Save chart if logger is provided
+        if logger:
+            logger.save_chart(f"feature_importance_{market}", f"Feature Importance for {market.capitalize()}")
+        
         plt.show()
