@@ -420,6 +420,9 @@ def simulate_with_classification(
         new_matches_df.loc[X_test.index, f"pred_{result_col}_{model}"] = y_pred
 
         for class_str in class_order:
+            if class_str not in my_pipeline.classes_:
+                continue
+            
             class_idx = list(my_pipeline.classes_).index(class_str)
 
             # Save the predicted probabilities for each class
