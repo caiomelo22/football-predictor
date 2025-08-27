@@ -15,9 +15,9 @@ def get_1x2_result(row):
         return "D"
     
 def get_ahc_result(row):
-    if row["away_score"] + row["away_ahc_odds"] > row["home_score"]:
+    if row["away_score"] + row["ahc_line"] > row["home_score"]:
         return "A"
-    elif row["home_score"] + -row["home_ahc_odds"] > row["away_score"]:
+    elif row["home_score"] + -row["ahc_line"] > row["away_score"]:
         return "H"
     else:
         return "P" # Bet push
