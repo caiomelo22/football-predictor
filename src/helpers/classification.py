@@ -8,13 +8,12 @@ from sklearn.ensemble import (
     AdaBoostClassifier,
     GradientBoostingClassifier,
     RandomForestClassifier,
-    VotingClassifier,
+    VotingClassifier
 )
-from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, StratifiedKFold, TimeSeriesSplit, cross_val_score
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, TimeSeriesSplit
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
@@ -92,7 +91,7 @@ class LabelEncoderClassifier(BaseEstimator, ClassifierMixin):
             self.estimator.set_params(**est_params)
         return self
 
-def build_pipeline(X_train, model, preprocess, feature_selection=None, n_features=None):        
+def build_pipeline(X_train, model, preprocess):        
     categorical_cols, numerical_cols, int_cols = set_numerical_categorical_cols(X_train)
 
     # Preprocessing for numerical data
@@ -132,12 +131,6 @@ def build_pipeline(X_train, model, preprocess, feature_selection=None, n_feature
 
     if preprocess:
         steps.append(("preprocessor", preprocessor))
-
-    # Add feature selection
-    if feature_selection == 'univariate' and n_features:
-        steps.append(("feature_selector", SelectKBest(score_func=f_classif, k=n_features)))
-    elif feature_selection == 'mutual_info' and n_features:
-        steps.append(("feature_selector", SelectKBest(score_func=mutual_info_classif, k=n_features)))
     
     # wrap XGBClassifier so string labels are handled automatically
     if isinstance(model, XGBClassifier):
@@ -191,21 +184,19 @@ def classification_bet_worth_it(prediction, odds, pred_odds, min_odds, bet_value
         or prediction == None # No prediction
         or pd.isna(prediction) # No prediction
         or odds < min_odds
-        # or odds < pred_odds
+        or odds < pred_odds
     ):
         return False
 
     return True
 
-def get_classification_models(random_state=0, manual_params=None) -> dict:
+def get_classification_models(random_state=0, voting_models=[], manual_params=None) -> dict:
     models_dict = {
         "naive_bayes": {
             "estimator": GaussianNB(),
             "params": None,
             "score": None,
             "param_grid": {},
-            "feature_selection": "univariate",
-            "n_features": 20
         },
         "knn": {
             "estimator": KNeighborsClassifier(),
@@ -224,16 +215,12 @@ def get_classification_models(random_state=0, manual_params=None) -> dict:
             "param_grid": {
                 "model__C": [0.001, 0.01, 0.1, 1, 5, 10, 50, 100],
             },
-            "feature_selection": "univariate",  # KNN benefits from feature selection
-            "n_features": 20
         },
         "svm": {
             "estimator": SVC(probability=True, random_state=random_state),
             "params": None,
             "score": None,
             "param_grid": {},
-            "feature_selection": "rfe",  # RFE works well with SVM
-            "n_features": 15
         },
         "random_forest": {
             "estimator": RandomForestClassifier(random_state=random_state, n_jobs=-1),
@@ -276,8 +263,6 @@ def get_classification_models(random_state=0, manual_params=None) -> dict:
             "params": None,
             "score": None,
             "param_grid": {},
-            "feature_selection": "univariate",  # Add this
-            "n_features": 15  # Add this
         },
         "xgboost": {
             "estimator": XGBClassifier(random_state=random_state, use_label_encoder=False, eval_metric="mlogloss"),
@@ -289,8 +274,6 @@ def get_classification_models(random_state=0, manual_params=None) -> dict:
                 "model__estimator__max_depth": [3, 6, 9],
                 "model__estimator__subsample": [0.8, 1.0],
             },
-            "feature_selection": None,  # Add this line
-            "n_features": None  # Add this line
         },
     }
     
@@ -300,6 +283,17 @@ def get_classification_models(random_state=0, manual_params=None) -> dict:
             if model_name in models_dict:
                 models_dict[model_name]["estimator"].set_params(**params)
                 models_dict[model_name]["params"] = params
+
+    if voting_models:
+        estimators = [(model, models_dict[model]["estimator"]) for model in voting_models if model in models_dict]
+        if estimators:
+            voting_clf = VotingClassifier(estimators=estimators, voting='soft')
+            models_dict["voting"] = {
+                "estimator": voting_clf,
+                "params": None,
+                "score": None,
+                "param_grid": {}
+            }
 
     return models_dict
 
@@ -327,6 +321,7 @@ def simulate_with_classification(
     class_order=["H", "D", "A"],
     fast_simulation=True,
     custom_models_config=None,
+    voting_models=[],
 ):
     matches_filtered = get_filtered_matches(
         matches,
@@ -351,7 +346,7 @@ def simulate_with_classification(
 
     manual_params = custom_models_config if fast_simulation else None
 
-    models_dict = get_classification_models(random_state, manual_params=manual_params)
+    models_dict = get_classification_models(random_state, manual_params=manual_params, voting_models=voting_models)
 
     new_matches_df = pd.DataFrame(index=X_test.index)
 
@@ -359,15 +354,10 @@ def simulate_with_classification(
         return new_matches_df, models_dict
 
     for model in models_dict.keys():
-        feature_selection = models_dict[model].get("feature_selection") if not fast_simulation else None
-        n_features = models_dict[model].get("n_features") if not fast_simulation else None
-
         my_pipeline = build_pipeline(
             X_train,
             models_dict[model]["estimator"],
             preprocess,
-            feature_selection=feature_selection,
-            n_features=n_features
         )
 
         param_grid = models_dict[model].get("param_grid", {})
@@ -635,14 +625,14 @@ def display_baseline_classification_results(matches, result_col="result"):
     # Display cumulative profit for Home method
     display_baseline_result(matches, result_col, "home")
 
-def display_market_classification_results(matches, start_season, min_odds, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix="odds", result_col = "result", class_order=["H", "D", "A"], include_baseline=True, logger=None):
+def display_market_classification_results(matches, start_season, min_odds, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix="odds", result_col = "result", class_order=["H", "D", "A"], include_baseline=True, logger=None, voting_models=[]):
     result_col_capitalized = result_col.capitalize()
 
     # Get baseline classification results
     if include_baseline:
         calculate_baseline_classification_results(matches, start_season, min_odds, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix=odds_col_suffix, result_col=result_col)   
     
-    model_names = get_classification_models(random_state=0).keys()
+    model_names = get_classification_models(random_state=0, voting_models=voting_models).keys()
 
     for model_name in model_names:
         matches[f'profit_{result_col}_{model_name}'] = matches.apply(lambda row: get_profit_classification(row, model_name, min_odds, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix, result_col), axis=1)
@@ -706,7 +696,7 @@ def display_market_classification_results(matches, start_season, min_odds, plot_
 
     return best_model_name
 
-def get_classification_simulation_results(matches, start_season, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, min_odds_1x2=2.2, min_odds_ahc=1.9, min_odds_totals=1.7, logger=None):
+def get_classification_simulation_results(matches, start_season, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, min_odds_1x2=2.2, min_odds_ahc=1.9, min_odds_totals=1.7, logger=None, voting_models=[]):
     # Display 1x2 classification results
     print("-"* 50)
     print("1x2 Classification Results")
@@ -723,7 +713,8 @@ def get_classification_simulation_results(matches, start_season, plot_threshold,
         result_col="result",
         class_order=["H", "A", "D"],
         include_baseline=True,
-        logger=logger
+        logger=logger,
+        voting_models=voting_models
     )
 
     # Display AHC classification results
@@ -742,7 +733,8 @@ def get_classification_simulation_results(matches, start_season, plot_threshold,
         result_col="ahc_result",
         class_order=["H", "A", "P"],
         include_baseline=True,
-        logger=logger
+        logger=logger,
+        voting_models=voting_models
     )
 
     # Display Totals classification results
@@ -761,7 +753,8 @@ def get_classification_simulation_results(matches, start_season, plot_threshold,
         result_col="totals_result",
         class_order=["O", "U", "P"],
         include_baseline=False,
-        logger=logger
+        logger=logger,
+        voting_models=voting_models
     )
 
     return best_1x2_model, best_ahc_model, best_totals_model
