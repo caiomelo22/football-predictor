@@ -149,7 +149,7 @@ class SimulationLogger:
         accuracy_path = os.path.join(self.simulation_dir, "model_accuracies.txt")
         
         with open(accuracy_path, 'w') as f:
-            for market_name, (class_order, _) in markets.items():
+            for market_name in markets:
                 f.write(f"\n{market_name.upper()} Model Accuracies:\n")
                 f.write("="*50 + "\n")
                 
