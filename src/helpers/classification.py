@@ -600,9 +600,6 @@ def calculate_baseline_classification_results(matches, start_season, min_odds, p
     matches[f'profit_home_{result_col}'] = matches.apply(lambda row: home_bet_profit(row, start_season, min_odds, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix, result_col), axis=1)
     matches[f'cum_profit_home_{result_col}'] = matches[f'profit_home_{result_col}'].cumsum()
 
-    # Plot cumulative profit
-    plt.figure(figsize=(12, 8))
-
     if matches[f'cum_profit_elo_{result_col}'].iloc[-1] > plot_threshold:
         plt.plot(matches["date"], matches[f'cum_profit_elo_{result_col}'], label=f'Cumulative Profit Elo {result_col.capitalize()}')
 
@@ -628,14 +625,14 @@ def display_baseline_classification_results(matches, result_col="result"):
 def display_market_classification_results(matches, start_season, min_odds, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix="odds", result_col = "result", class_order=["H", "D", "A"], include_baseline=True, logger=None, voting_models=[]):
     result_col_capitalized = result_col.capitalize()
 
+    # Add this line to set the figure size to 12x8
+    plt.figure(figsize=(12, 8))
+
     # Get baseline classification results
     if include_baseline:
         calculate_baseline_classification_results(matches, start_season, min_odds, plot_threshold, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix=odds_col_suffix, result_col=result_col)   
     
     model_names = get_classification_models(random_state=0, voting_models=voting_models).keys()
-
-    # Add this line to set the figure size to 12x8
-    plt.figure(figsize=(12, 8))
     
     for model_name in model_names:
         matches[f'profit_{result_col}_{model_name}'] = matches.apply(lambda row: get_profit_classification(row, model_name, min_odds, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix, result_col), axis=1)
@@ -658,7 +655,7 @@ def display_market_classification_results(matches, start_season, min_odds, plot_
 
     if include_baseline:
         display_baseline_classification_results(matches, result_col=result_col)
-
+        
     best_model_name = None
     best_model_profit = -1000
 
