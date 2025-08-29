@@ -634,6 +634,9 @@ def display_market_classification_results(matches, start_season, min_odds, plot_
     
     model_names = get_classification_models(random_state=0, voting_models=voting_models).keys()
 
+    # Add this line to set the figure size to 12x8
+    plt.figure(figsize=(12, 8))
+    
     for model_name in model_names:
         matches[f'profit_{result_col}_{model_name}'] = matches.apply(lambda row: get_profit_classification(row, model_name, min_odds, bankroll, strategy, default_value, default_bankroll_pct, odds_col_suffix, result_col), axis=1)
         matches[f'cum_profit_{result_col}_{model_name}'] = matches[f'profit_{result_col}_{model_name}'].cumsum()
