@@ -657,18 +657,20 @@ def display_market_classification_results(matches, start_season, min_odds, plot_
         display_baseline_classification_results(matches, result_col=result_col)
         
     best_model_name = None
-    best_model_profit = -1000
+    best_model_yield = -1000
 
     for model_name in model_names:
         cum_profit = round(matches.iloc[-1][f'cum_profit_{result_col}_{model_name}'], 4)
         col_size = len(matches[matches[f"profit_{result_col}_{model_name}"] != 0])
 
-        if cum_profit > best_model_profit:
+        cum_yield = cum_profit / col_size
+
+        if cum_yield > best_model_yield:
             best_model_name = model_name
-            best_model_profit = cum_profit
+            best_model_yield = cum_yield
 
         print(f"{result_col_capitalized} method with {model_name.ljust(20)} --> ({str(cum_profit).rjust(7)}/{str(col_size).rjust(3)}):", 
-        round(cum_profit / col_size, 4))
+        round(cum_yield, 4))
         
     # Evaluate best model
     best_models_predicted_matches = matches[matches[f"pred_{result_col}_{best_model_name}"].notna()]
@@ -676,6 +678,7 @@ def display_market_classification_results(matches, start_season, min_odds, plot_
     y_test = best_models_predicted_matches[result_col]
 
     print(f"\n{result_col_capitalized} Profit for {best_model_name}: ${round(matches.iloc[-1][f'cum_profit_{result_col}_{best_model_name}'], 4)}")
+    print(f"\n{result_col_capitalized} Yield for {best_model_name}: {round(best_model_yield, 4)}")
     print(f"{result_col_capitalized} Accuracy for {best_model_name}: {accuracy_score(y_test, y_pred):.2f}")
     print(f"{result_col_capitalized} Classification Report for {best_model_name}:")
     print(classification_report(y_test, y_pred))
