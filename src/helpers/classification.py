@@ -678,9 +678,9 @@ def display_market_classification_results(matches, start_season, min_odds, plot_
     y_test = best_models_predicted_matches[result_col]
 
     print(f"\n{result_col_capitalized} Profit for {best_model_name}: ${round(matches.iloc[-1][f'cum_profit_{result_col}_{best_model_name}'], 4)}")
-    print(f"\n{result_col_capitalized} Yield for {best_model_name}: {round(best_model_yield, 4)}")
+    print(f"{result_col_capitalized} Yield for {best_model_name}: {round(best_model_yield, 4)}")
     print(f"{result_col_capitalized} Accuracy for {best_model_name}: {accuracy_score(y_test, y_pred):.2f}")
-    print(f"{result_col_capitalized} Classification Report for {best_model_name}:")
+    print(f"\n{result_col_capitalized} Classification Report for {best_model_name}:")
     print(classification_report(y_test, y_pred))
 
     # Confusion Matrix
