@@ -51,12 +51,12 @@ class SimulationLogger:
                 "output": output
             })
             
-            # Also print to console
-            print(output, end='')
-            
             return result
         finally:
             sys.stdout = old_stdout
+        
+            # Also print to console
+            print(output, end='')
     
     def save_chart(self, chart_name, description="", figure=None):
         """Save a specific matplotlib figure"""
